@@ -4,7 +4,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api import chat, courses
+from api import chat, courses, schedule
 
 app = FastAPI(title="UofT AI Copilot API", version="1.0.0")
 
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(chat.router)
 app.include_router(courses.router)
+app.include_router(schedule.router)
 
 @app.get("/")
 def read_root():
