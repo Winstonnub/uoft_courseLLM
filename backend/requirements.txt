@@ -1,0 +1,9 @@
+fastapi[standard]
+uvicorn
+requests
+beautifulsoup4
+praw
+PyMuPDF
+chromadb
+langchain-openai
+python-dotenv

@@ -1,0 +1,182 @@
+[
+  {
+    "course_code": "ABP100Y1 - Introduction to Academic Studies",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP101Y1 - Introduction to Academic Studies in the Sciences",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP102Y1 - Diversity and Social Justice in Canada",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP103Y1 - Exploring Literature",
+    "title": "From Conventional to Cutting Edge",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP104Y1 - Environmental Issues Today",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP105Y1 - Indigenous Cultures and Societies",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP106Y1 - Media, Culture, and Society",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP107Y1 - Introduction to University Studies in Mathematics",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP108Y1 - Introduction to University Studies in Chemistry",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ABP109Y1 - Diverse Histories of Canada",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT100H1 - Wizard Managers of Risks",
+    "title": "Exploring Actuarial Science",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT199H1 - Decipher Financial Puzzles in the Media and Pop Culture",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT230H1 - Mathematics of Finance for Non-Actuaries",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT240H1 - Mathematics of Investment & Credit",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT245H1 - Financial Principles for Actuarial Science I",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT247H1 - Introductory Life Contingencies",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT348H1 - Life Contingencies II",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT349H1 - Corporate Finance for Actuarial Science",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT350H1 - Applied Probability for Actuarial Science",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT351H1 - Loss Models",
+    "title": "From Data to Decisions",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT352H1 - Statistical Methods for Actuarial Loss Models",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT370H1 - Financial Principles for Actuarial Science II",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT371H1 - Reserving Methods For Property & Casualty Insurance",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT372H1 - Ratemaking Methods For Property & Casualty Insurance",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT390H1 - Professional Experience in Actuarial Science",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT391H1 - Professional Internship",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT398H0 - Research Excursions",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT398Y0 - Research Excursions",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT455H1 - Advanced Life Contingencies - Modeling and Applications",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  },
+  {
+    "course_code": "ACT460H1 - Stochastic Methods for Finance",
+    "title": "",
+    "description": "",
+    "prerequisites": ""
+  }
+]
