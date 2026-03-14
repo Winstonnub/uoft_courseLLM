@@ -67,7 +67,7 @@ def _schedule_has_conflict(sections: List[Dict]) -> bool:
     return False
 
 
-def _score_schedule(sections: List[Dict]) -> float:
+def _score_schedule(sections: List[Dict], time_preference: str = 'balanced') -> float:
     score = 0.0
     for sec in sections:
         avail = sec.get('availability', {})
@@ -78,6 +78,31 @@ def _score_schedule(sections: List[Dict]) -> float:
         score -= sec.get('waitlist_count', 0) * 0.5
         if sec.get('cancelled', False):
             score -= 100
+
+    # ── Time preference bonus ──
+    # Collect all meeting start times across all sections
+    start_minutes = []
+    for sec in sections:
+        for m in sec.get('meetings', []):
+            t = _parse_time(m.get('start_time', ''))
+            if t is not None:
+                start_minutes.append(t)
+
+    if start_minutes:
+        avg_start = sum(start_minutes) / len(start_minutes)
+        if time_preference == 'early':
+            # Reward earlier classes: 8:00AM=480 is ideal
+            # Max bonus ~15 points for avg start at 8AM, 0 for 3PM+
+            score += max(0, (900 - avg_start) / 28)
+        elif time_preference == 'late':
+            # Reward later classes: 3PM=900 or later is ideal
+            score += max(0, (avg_start - 480) / 28)
+        else:  # balanced
+            # Reward midday: 10AM-2PM ideal range (600-840)
+            midpoint = 720  # noon
+            deviation = abs(avg_start - midpoint)
+            score += max(0, (240 - deviation) / 16)
+
     return score
 
 
@@ -145,18 +170,19 @@ def _build_section_combos(course: Dict) -> List[Tuple[Dict, ...]]:
 
 def generate_schedules(
     course_codes: List[str],
-    max_schedules: int = 5
+    max_schedules: int = 5,
+    time_preference: str = 'balanced'
 ) -> Dict[str, Any]:
     """
-    Generate session-aware, conflict-free schedules.
+    Generate session-aware, conflict-free schedules using backtracking.
 
-    Returns separate fall_schedule and winter_schedule for each valid combo.
+    Returns separate fall and winter timetables for each valid combo.
     Full-year (Y) courses are locked to the same section across both semesters.
     """
     errors = []
-    fall_courses = []    # F courses
-    winter_courses = []  # S courses
-    year_courses = []    # Y courses (appear in BOTH)
+    fall_courses = []
+    winter_courses = []
+    year_courses = []
 
     for code in course_codes:
         course = find_course(code)
@@ -169,72 +195,109 @@ def generate_schedules(
             continue
 
         term = _get_course_term(course)
-        entry = {'course_code': course['course_code'], 'title': course.get('title', ''), 'term': term, 'combos': combos}
+        entry = {
+            'course_code': course['course_code'],
+            'title': course.get('title', ''),
+            'term': term,
+            'combos': combos,
+        }
 
         if term == 'F':
             fall_courses.append(entry)
         elif term == 'S':
             winter_courses.append(entry)
-        else:  # Y
+        else:
             year_courses.append(entry)
 
-    # Y courses must not conflict with F courses (fall) NOR S courses (winter)
-    # AND use the same sections in both semesters.
-    #
-    # Strategy: generate cross-product of all course combos, then validate
-    # that fall-side has no conflicts and winter-side has no conflicts.
-
+    # Order: Y first (tightest constraints), then F, then S
     all_groups = year_courses + fall_courses + winter_courses
     if not all_groups:
         return {"schedules": [], "total_valid": 0, "errors": errors}
 
-    # Cap combinatorial explosion
-    MAX_COMBOS = 50000
-    all_combo_lists = [g['combos'] for g in all_groups]
-    total = 1
-    for c in all_combo_lists:
-        total *= len(c)
-    if total > MAX_COMBOS:
-        for g in all_groups:
-            scored = sorted(g['combos'], key=lambda combo: _score_schedule(list(combo)), reverse=True)
-            g['combos'] = scored[:10]
-        all_combo_lists = [g['combos'] for g in all_groups]
+    # Sort combos within each course by score (best first)
+    for g in all_groups:
+        g['combos'] = sorted(
+            g['combos'],
+            key=lambda combo: _score_schedule(list(combo), time_preference),
+            reverse=True,
+        )
+        # Keep top-15 combos per course to balance speed vs coverage
+        g['combos'] = g['combos'][:15]
 
-    valid_schedules = []
+    # ── Backtracking search ──────────────────────────────────────────────
+    # Instead of brute-force product, we add one course at a time and
+    # immediately check if the new sections conflict with already-placed
+    # sections. If they do, we prune that entire branch.
 
-    for cross_combo in product(*all_combo_lists):
-        # Split sections into fall-side and winter-side
-        fall_sections = []
-        winter_sections = []
+    COLLECT_LIMIT = max_schedules * 10
+    valid_schedules: List[Dict] = []
+    nodes_visited = 0
+    MAX_NODES = 500_000  # safety cap
 
-        for i, group in enumerate(all_groups):
-            sections_chosen = list(cross_combo[i])
-            term = group['term']
+    def _new_sections_conflict(new_secs: List[Dict], existing_secs: List[Dict]) -> bool:
+        """Check if any new section conflicts with any existing section."""
+        for ns in new_secs:
+            for es in existing_secs:
+                if _meetings_conflict(ns.get('meetings', []), es.get('meetings', [])):
+                    return True
+        return False
+
+    def backtrack(idx: int, fall_so_far: List[Dict], winter_so_far: List[Dict]):
+        nonlocal nodes_visited
+        if len(valid_schedules) >= COLLECT_LIMIT:
+            return
+        if nodes_visited > MAX_NODES:
+            return
+
+        if idx == len(all_groups):
+            # All courses placed — this is a valid schedule
+            score = _score_schedule(fall_so_far + winter_so_far, time_preference)
+            valid_schedules.append({
+                'fall_sections': list(fall_so_far),
+                'winter_sections': list(winter_so_far),
+                'score': score,
+                'fall_warnings': _generate_warnings(fall_so_far),
+                'winter_warnings': _generate_warnings(winter_so_far),
+            })
+            return
+
+        group = all_groups[idx]
+        term = group['term']
+
+        for combo in group['combos']:
+            nodes_visited += 1
+            if nodes_visited > MAX_NODES:
+                return
+            if len(valid_schedules) >= COLLECT_LIMIT:
+                return
+
+            sections = list(combo)
+            conflict = False
+
             if term == 'F':
-                fall_sections.extend(sections_chosen)
+                if _new_sections_conflict(sections, fall_so_far):
+                    conflict = True
             elif term == 'S':
-                winter_sections.extend(sections_chosen)
-            else:  # Y → appears in BOTH semesters with same meetings
-                fall_sections.extend(sections_chosen)
-                winter_sections.extend(sections_chosen)
+                if _new_sections_conflict(sections, winter_so_far):
+                    conflict = True
+            else:  # Y — must fit in BOTH semesters
+                if _new_sections_conflict(sections, fall_so_far):
+                    conflict = True
+                elif _new_sections_conflict(sections, winter_so_far):
+                    conflict = True
 
-        # Check conflicts independently for each semester
-        if _schedule_has_conflict(fall_sections):
-            continue
-        if _schedule_has_conflict(winter_sections):
-            continue
+            if conflict:
+                continue
 
-        score = _score_schedule(fall_sections + winter_sections)
-        fall_warnings = _generate_warnings(fall_sections)
-        winter_warnings = _generate_warnings(winter_sections)
+            # Place this combo and recurse
+            if term == 'F':
+                backtrack(idx + 1, fall_so_far + sections, winter_so_far)
+            elif term == 'S':
+                backtrack(idx + 1, fall_so_far, winter_so_far + sections)
+            else:  # Y
+                backtrack(idx + 1, fall_so_far + sections, winter_so_far + sections)
 
-        valid_schedules.append({
-            'fall_sections': fall_sections,
-            'winter_sections': winter_sections,
-            'score': score,
-            'fall_warnings': fall_warnings,
-            'winter_warnings': winter_warnings,
-        })
+    backtrack(0, [], [])
 
     # Sort by score
     valid_schedules.sort(key=lambda s: s['score'], reverse=True)

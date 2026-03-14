@@ -86,3 +86,22 @@ This document outlines our game plan for the 30-hour hackathon, broken down into
 - **Micro-animations:** Add `framer-motion` to make messages pop in and modals slide smoothly. The UI *must* look premium.
 - **Deploy:** Host the frontend on Vercel and the backend on Render/Railway so anyone can try it during the demo.
 - **Citations UI:** Make the chat interface show clickable "Source tags" (e.g., [Syllabus], [Reddit]) when the LLM makes a claim.
+
+---
+
+## Phase 6: Dashboard, Redesign & Algorithm Overhaul (Post-Hackathon Polish)
+**Main Goal:** Transform the app into a premium-looking product and fix performance bottlenecks in the scheduler.
+**Tech Stack:** CSS glassmorphism, Tailwind, recursive backtracking (Python).
+
+### Core Tasks:
+- [x] Build a premium Dashboard homepage at `/`.
+- [x] Apply glassmorphism design system across all pages.
+- [x] Rewrite scheduler from brute-force to backtracking (supports 9+ courses).
+- [x] Add time preference feature (early/balanced/late).
+- [x] Add "Apply to Timetable" feature in generator.
+- [x] Fix Chat API request/response mismatches.
+
+### Sidequests 🏹:
+- **Persistence:** Back timetable state with SQLite instead of in-memory storage.
+- **ChromaDB Population:** Populate the `academic_rules` collection for semantic search.
+- **Deploy:** Host on Vercel + Railway for public demo.

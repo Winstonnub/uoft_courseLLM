@@ -2,205 +2,151 @@
 
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { motion, AnimatePresence } from "framer-motion";
-import { Bot, User, Send, ExternalLink, Loader2, Info } from "lucide-react";
+import { Send, Sparkles, User, Bot, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  sources?: string[];
 }
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hi! I'm your UofT AI Course Copilot. I know everything about the Arts & Science calendar, course prerequisites, and official academic rules. How can I help you plan your degree today?",
+      content: "Hi! I'm your **UofT AI Course Copilot**. I know everything about the Arts & Science calendar, course prerequisites, and official academic rules. \n\nHow can I help you plan your degree today?",
     },
   ]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  async function sendMessage(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!input.trim() || isLoading) return;
 
-    const userMessage = input.trim();
+    const userMsg = input.trim();
     setInput("");
-    
-    // Add user message to UI immediately
-    const newMessages: Message[] = [...messages, { role: "user", content: userMessage }];
+    const newMessages: Message[] = [...messages, { role: "user", content: userMsg }];
     setMessages(newMessages);
-    setLoading(true);
+    setIsLoading(true);
 
     try {
       const res = await fetch("http://localhost:8000/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages.map(m => ({ role: m.role, content: m.content }))
+          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
         }),
       });
-
-      if (!res.ok) throw new Error("Failed to fetch response");
       const data = await res.json();
-      
-      setMessages([...newMessages, { 
-        role: "assistant", 
-        content: data.reply,
-        sources: data.sources
-      }]);
-    } catch (error) {
-      setMessages([...newMessages, { role: "assistant", content: "Sorry, I'm having trouble connecting to my backend right now." }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: data.reply || "No response received." }]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "I'm sorry, I'm having trouble connecting to my brain right now. Please make sure the backend server is running!" },
+      ]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
-    }
-  };
+  }
 
   return (
-    <div className="flex flex-col h-screen bg-[#f9fafc]">
-      {/* Navbar */}
-      <header className="sticky top-0 z-30 bg-[#002A5C] shadow-lg shrink-0">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-white font-black text-sm">U</div>
-              <span className="text-white font-bold text-base tracking-tight">UofT Course Explorer</span>
-            </Link>
-          </div>
-          <div className="flex gap-4 items-center">
-            <Link href="/" className="text-white/70 hover:text-white text-sm font-medium transition">Catalog</Link>
-            <div className="px-3 py-1 rounded-full border border-white/20 bg-white/10 text-white text-sm font-semibold">
-              <Bot className="w-4 h-4 inline-block mr-1.5 -translate-y-px" />
-              Copilot
-            </div>
+    <div className="min-h-screen relative bg-[#030712] text-white flex flex-col font-sans selection:bg-blue-500/30">
+      {/* Dynamic Background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full animate-blob" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 blur-[120px] rounded-full animate-blob animation-delay-2000" />
+      </div>
+
+      <header className="relative z-20 glass border-b border-white/10 backdrop-blur-xl shrink-0">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-all">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-lg shadow-lg">U</div>
+            <span className="font-black text-xl tracking-tighter">CO<span className="text-blue-500">PILOT</span></span>
+          </Link>
+          <div className="flex gap-4">
+            <Link href="/timetable" className="rounded-xl px-4 py-2 text-sm font-black bg-white/5 hover:bg-white/10 border border-white/10 transition-all">Timetable</Link>
+            <Link href="/generate" className="rounded-xl px-4 py-2 text-sm font-black bg-white/5 hover:bg-white/10 border border-white/10 transition-all">⚡ Generator</Link>
           </div>
         </div>
       </header>
 
-      {/* Main Chat Area */}
-      <main className="flex-1 overflow-y-auto px-4 py-8">
-        <div className="max-w-3xl mx-auto space-y-6">
+      <main className="relative z-10 flex-1 overflow-hidden flex flex-col mx-auto w-full max-w-5xl">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-8 space-y-8 scroll-smooth">
           <AnimatePresence initial={false}>
-            {messages.map((message, i) => (
+            {messages.map((m, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className={`flex gap-4 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className={`flex gap-4 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}
               >
-                {/* Avatar */}
-                <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center shadow-sm ${
-                  message.role === "assistant" 
-                    ? "bg-[#002A5C] text-white" 
-                    : "bg-blue-100 text-blue-700"
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
+                  m.role === "user" ? "bg-white/10 border border-white/10 text-white" : "bg-blue-600 border border-blue-400/30 text-white"
                 }`}>
-                  {message.role === "assistant" ? <Bot size={18} /> : <User size={18} />}
+                  {m.role === "user" ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
                 </div>
 
-                {/* Message Bubble */}
-                <div className={`flex flex-col gap-2 max-w-[85%] ${message.role === "user" ? "items-end" : "items-start"}`}>
-                  <div className={`px-5 py-3.5 rounded-2xl shadow-sm text-sm ${
-                    message.role === "user"
-                      ? "bg-blue-600 text-white rounded-tr-none"
-                      : "bg-white border border-gray-100 text-gray-800 rounded-tl-none prose prose-p:leading-relaxed prose-pre:bg-gray-50 prose-pre:text-gray-800 prose-a:text-blue-600"
-                  }`}>
-                    {message.role === "user" ? (
-                      <div className="whitespace-pre-wrap">{message.content}</div>
-                    ) : (
-                      <ReactMarkdown>{message.content}</ReactMarkdown>
-                    )}
+                <div className={`max-w-[80%] rounded-3xl px-6 py-4 shadow-2xl backdrop-blur-xl border ${
+                  m.role === "user" 
+                    ? "bg-white/5 border-white/10 text-white/90 rounded-tr-none" 
+                    : "bg-blue-600/10 border-blue-500/20 text-white/90 rounded-tl-none"
+                }`}>
+                  <div className="prose prose-invert prose-sm max-w-none font-medium leading-relaxed">
+                    <ReactMarkdown>
+                      {m.content}
+                    </ReactMarkdown>
                   </div>
-                  
-                  {/* Citations/Tags */}
-                  {message.sources && message.sources.length > 0 && (
-                    <motion.div 
-                      initial={{ opacity: 0 }} 
-                      animate={{ opacity: 1 }} 
-                      transition={{ delay: 0.4 }}
-                      className="flex gap-2 flex-wrap"
-                    >
-                      {message.sources.map((src, idx) => (
-                        <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-gray-200 text-xs font-medium text-gray-500 shadow-sm">
-                          <Info size={12} className="text-[#002A5C]" />
-                          {src}
-                        </span>
-                      ))}
-                    </motion.div>
-                  )}
                 </div>
               </motion.div>
             ))}
-            
-            {loading && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex gap-4"
-              >
-                <div className="shrink-0 w-8 h-8 rounded-full bg-[#002A5C] text-white flex items-center justify-center shadow-sm">
-                  <Bot size={18} />
-                </div>
-                <div className="px-5 py-4 rounded-2xl rounded-tl-none bg-white border border-gray-100 shadow-sm flex gap-1 items-center">
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
-              </motion.div>
-            )}
           </AnimatePresence>
-          <div ref={messagesEndRef} />
+          {isLoading && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg">
+                <Bot className="w-5 h-5" />
+              </div>
+              <div className="flex items-center gap-1.5 px-6 py-4 rounded-3xl bg-blue-600/5 border border-blue-500/10">
+                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" />
+              </div>
+            </motion.div>
+          )}
         </div>
-      </main>
 
-      {/* Input Area */}
-      <footer className="bg-white border-t border-gray-100 p-4 shrink-0">
-        <div className="max-w-3xl mx-auto">
-          <form 
-            onSubmit={handleSubmit}
-            className="relative flex items-end gap-2 bg-gray-50 rounded-2xl border border-gray-200 focus-within:border-[#002A5C]/50 focus-within:ring-2 focus-within:ring-[#002A5C]/20 transition-all p-2 shadow-sm"
-          >
-            <textarea
+        <div className="p-4 md:p-8 shrink-0">
+          <form onSubmit={sendMessage} className="relative group">
+            <div className="absolute inset-0 bg-blue-500/20 blur-2xl group-hover:bg-blue-500/30 transition-all rounded-[32px] pointer-events-none" />
+            <input
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about a course prerequisite, academic rules, or degree planning..."
-              className="flex-1 max-h-32 min-h-[44px] bg-transparent resize-none outline-none py-2 px-3 text-sm text-gray-800 placeholder:text-gray-400"
-              rows={1}
+              placeholder="Ask about MAT223, breadth requirements, or degree plans..."
+              className="relative w-full rounded-[32px] glass-dark border border-white/10 px-8 py-6 text-sm font-bold placeholder:text-white/20 focus:outline-none focus:border-blue-500/50 transition-all pr-20"
             />
             <button
               type="submit"
-              disabled={!input.trim() || loading}
-              className="mb-1 mr-1 shrink-0 p-2.5 rounded-xl bg-[#002A5C] text-white hover:bg-[#003875] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              disabled={isLoading || !input.trim()}
+              className="absolute right-3 top-3 bottom-3 w-14 rounded-2xl bg-blue-600 flex items-center justify-center hover:bg-blue-500 transition-all disabled:opacity-30 shadow-lg"
             >
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className="translate-x-[1px]" />}
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </form>
-          <div className="text-center mt-3">
-            <span className="text-[11px] text-gray-400">
-              AI Copilot can make mistakes. Verify critical graduation requirements with your registrar.
-            </span>
-          </div>
+          <p className="text-center mt-4 text-[10px] font-black uppercase tracking-[0.2em] text-white/20">
+            AI can make mistakes. Verify important academic rules.
+          </p>
         </div>
-      </footer>
+      </main>
     </div>
   );
 }

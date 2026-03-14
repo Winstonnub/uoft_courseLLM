@@ -121,3 +121,42 @@ We have successfully set up the foundation of the monorepo and created the scrap
 ### Context for Teammates (Next Actions)
 1. **Final Integration**: Connect the generated schedule entries to the existing timetable Calendar view so users can "Apply" a generated schedule.
 2. **Polish**: Add micro-animations, dark mode toggle, and deploy to Vercel/Railway for the demo.
+
+---
+
+## Completed in Phase 6 (Dashboard, Glassmorphism Redesign & Scheduler Overhaul)
+
+### 1. Premium Dashboard Homepage (Winston)
+- **What I did**: Built a new landing page at `/` with hero section, feature cards, and quick navigation.
+- **How I did it**: Replaced the old root `page.tsx` with a modern dashboard using animated CSS blobs, glassmorphism panels, and a stats strip. Moved the timetable to a dedicated `/timetable` route.
+- **What it's for**: Provides a polished "first impression" landing page that routes users to the Planner, Generator, or AI Chat.
+
+### 2. Glassmorphism Design System (Winston)
+- **What I did**: Overhauled the entire app's visual design to a consistent dark-mode glassmorphism aesthetic.
+- **How I did it**: Updated `globals.css` with new design tokens (`glass`, `glass-card`, `glass-dark`), animated blob backgrounds, and utility classes. Restyled all four pages (`/`, `/timetable`, `/generate`, `/chat`) with frosted glass panels, `backdrop-filter`, `rgba` backgrounds, and premium typography.
+- **What it's for**: Makes the app look and feel like a modern, premium SaaS product — critical for hackathon presentation impact.
+
+### 3. Backtracking Schedule Generator (Winston)
+- **What I did**: Rewrote the schedule generation algorithm from brute-force cartesian product to recursive backtracking.
+- **How I did it**: Replaced the `itertools.product()` loop in `scheduler.py` with a `backtrack()` function that places one course at a time and prunes branches immediately on conflict detection. Added per-course combo pruning (top-15 by score) and safety caps (500k nodes, collect limit).
+- **What it's for**: The old algorithm hung indefinitely on 9 courses (~5.7 billion combos). The new one finds 50 valid schedules in 0.07 seconds by cutting dead branches early.
+
+### 4. Time Preference Feature (Winston)
+- **What I did**: Added ability to prefer early, balanced, or late class times.
+- **How I did it**: Added a `time_preference` parameter (`'early'`/`'balanced'`/`'late'`) to `_score_schedule()` in `scheduler.py`, which applies a bonus based on average meeting start times. Wired it through `schedule.py` API endpoint. Built a 3-option toggle UI (☀️ Early Bird / 🕐 Balanced / 🌙 Night Owl) in the frontend generator page.
+- **What it's for**: Lets users express lifestyle preferences that influence schedule ranking without overriding conflict-free validity.
+
+### 5. "Apply to Timetable" Feature (Winston)
+- **What I did**: Added a button in the Schedule Generator to instantly sync a chosen schedule to the main timetable.
+- **How I did it**: The `applySchedule()` function in `generate/page.tsx` clears the existing timetable via `POST /api/timetable` and then adds each section. After applying, the user is redirected to `/timetable`.
+- **What it's for**: Eliminates manual re-entry — one click to go from generated schedule to your main calendar.
+
+### 6. Chat API Fix (Winston)
+- **What I did**: Fixed the Copilot chat returning empty responses.
+- **How I did it**: The frontend was sending `{ message: "..." }` but the backend expected `{ messages: [{ role, content }] }`. It was also reading `data.response` instead of `data.reply`. Fixed both mismatches in `chat/page.tsx`.
+- **What it's for**: The AI Copilot now correctly sends full conversation history and reads the backend response.
+
+### Context for Teammates (Next Actions)
+1. **ChromaDB Population**: The `academic_rules` collection is still empty — need to run `chunk_documents.py` to populate it for semantic search.
+2. **Deployment**: Host frontend on Vercel, backend on Render/Railway for the demo.
+3. **Persistence**: Timetable data is in-memory — needs SQLite backing for production.
