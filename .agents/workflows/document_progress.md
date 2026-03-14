@@ -18,7 +18,7 @@ When a phase completes, you must update the following four tracking documents:
 2. **`phase.md`**:
    - Update the overarching project plan if any timelines, architecture decisions, or sidequests were successfully altered during the phase.
 
-3. **`tutorial.md`**:
+3. **`tutorial_phase[number].md`**:
    - Write a step-by-step "ChatGPT-style" tutorial for the code that was just written.
    - Explain the core concepts (e.g., SQLite ingestion, LangChain text chunking, Next.js routing) as if you are teaching an absolute beginner how to implement what you just built.
    - Provide minimal, clean code snippets of the actual implementation.
@@ -29,7 +29,7 @@ When a phase completes, you must update the following four tracking documents:
 
 **// turbo-all**
 ```bash
-git add log.md phase.md tutorial.md work_distribution.md
+git add log.md phase.md tutorial_phase*.md work_distribution.md
 git commit -m "chore: execute document_progress workflow for current phase"
 git push origin main
 ```
