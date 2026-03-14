@@ -84,3 +84,40 @@ We have successfully set up the foundation of the monorepo and created the scrap
 ### Context for Teammates (Next Actions)
 1. **Winston**: Now moving to Phase 4 (Timetable Scheduler Logic) to build the conflict-detecting algorithm.
 2. **Kiko**: The endpoints (`/api/chat` and `/api/courses`) are completely ready for integration! You can build the Chat Interface and hit these URLs now.
+
+---
+
+## Completed in Phase 4 (Frontend Chat Interface & LLM Integration)
+
+### 1. ChatGPT-Style Chat UI (Winston)
+- **What I did**: Built a full ChatGPT-like messaging interface at `/chat`.
+- **How I did it**: Created `frontend/src/app/chat/page.tsx` using React, `framer-motion` (message pop-in animations), `react-markdown` (LLM response rendering), and `lucide-react` (icons). Messages are sent to `http://localhost:8000/api/chat` via `fetch`.
+- **What it's for**: Gives users a familiar, polished chat experience to ask the AI Copilot about courses, prerequisites, and academic rules.
+
+### 2. RAG Pipeline Fix (Winston)
+- **What I did**: Fixed the RAG pipeline so it actually uses course data when answering questions.
+- **How I did it**: Rewrote `backend/services/rag.py` to auto-detect course codes (e.g., `MAT223`) via regex, query the SQLite database for matching courses, and inject full course details into the LLM system prompt. Added keyword fallback search for non-code queries.
+- **What it's for**: Before this fix, the LLM had zero context about any specific course. Now it returns detailed, accurate answers with prerequisites, exclusions, and breadth requirements.
+
+---
+
+## Completed in Phase 5 (Timetable Scheduler Logic & UI)
+
+### 1. Schedule Generation Algorithm (Winston)
+- **What I did**: Built an algorithm that generates conflict-free timetable schedules.
+- **How I did it**: Created `backend/services/scheduler.py` which loads `timetable_full.json` (3,832 courses), groups sections by type (LEC/TUT/PRA), uses cartesian product to generate all valid combinations, filters time conflicts, and scores schedules by seat availability. Penalizes full/waitlisted/cancelled sections.
+- **What it's for**: The core algorithmic engine — given a list of desired courses, it finds every possible non-conflicting timetable and ranks them by enrollment openness.
+
+### 2. Schedule Generation Endpoint (Winston)
+- **What I did**: Created the `POST /api/schedule/generate` FastAPI endpoint.
+- **How I did it**: Built `backend/api/schedule.py` with Pydantic request model (`course_codes`, `session`, `max_schedules`). Wired the router into `backend/main.py`.
+- **What it's for**: The REST API that the frontend calls to generate schedules on demand.
+
+### 3. Schedule Generator Frontend (Winston)
+- **What I did**: Built an interactive "Schedule Generator" page at `/generate`.
+- **How I did it**: Created `frontend/src/app/generate/page.tsx` with course wishlist builder (autocomplete search), "Generate" button, schedule tabs, enrollment bars with full/waitlist warnings, and a mini weekly calendar preview. Added nav links in both the timetable and chat pages.
+- **What it's for**: Lets users build a course wishlist, click one button, and instantly see ranked conflict-free schedules with enrollment health indicators.
+
+### Context for Teammates (Next Actions)
+1. **Final Integration**: Connect the generated schedule entries to the existing timetable Calendar view so users can "Apply" a generated schedule.
+2. **Polish**: Add micro-animations, dark mode toggle, and deploy to Vercel/Railway for the demo.

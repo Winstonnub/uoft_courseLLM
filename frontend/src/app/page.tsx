@@ -685,6 +685,10 @@ export default function TimetablePage() {
             <span>🤖</span> Copilot
           </a>
 
+          <a href="/generate" className="rounded-xl border border-emerald-400/30 bg-emerald-500/20 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/30 transition flex items-center gap-1.5">
+            <span>⚡</span> Generator
+          </a>
+
           <button
             onClick={clearTimetable}
             disabled={timetable.entries.length === 0 || ttLoading}
