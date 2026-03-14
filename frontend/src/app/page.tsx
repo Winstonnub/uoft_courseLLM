@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import type { Course, Section } from "@/types/course";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import type { Course, Section, Meeting } from "@/types/course";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -43,6 +43,55 @@ function typeColor(type: string): string {
   return "bg-gray-100 text-gray-600";
 }
 
+function timeToMinutes(t: string): number | null {
+  if (!t || t === "TBA") return null;
+  const m = t.match(/^\s*(\d{1,2}):(\d{2})\s*(AM|PM)\s*$/i);
+  if (!m) return null;
+  let hour = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ampm = m[3].toUpperCase();
+  if (ampm === "AM") {
+    if (hour === 12) hour = 0;
+  } else {
+    if (hour !== 12) hour += 12;
+  }
+  return hour * 60 + min;
+}
+
+const DAYS: ReadonlyArray<{ key: "Mon" | "Tue" | "Wed" | "Thu" | "Fri"; label: string }> = [
+  { key: "Mon", label: "Monday" },
+  { key: "Tue", label: "Tuesday" },
+  { key: "Wed", label: "Wednesday" },
+  { key: "Thu", label: "Thursday" },
+  { key: "Fri", label: "Friday" },
+];
+
+function dayKey(day: string): "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | null {
+  const d = (day || "").toLowerCase();
+  if (d.startsWith("mon")) return "Mon";
+  if (d.startsWith("tue")) return "Tue";
+  if (d.startsWith("wed")) return "Wed";
+  if (d.startsWith("thu")) return "Thu";
+  if (d.startsWith("fri")) return "Fri";
+  return null;
+}
+
+function entryColor(type: string) {
+  if (type === "LEC") return "bg-blue-600/10 border-blue-200 text-blue-900";
+  if (type === "TUT") return "bg-emerald-600/10 border-emerald-200 text-emerald-900";
+  if (type === "PRA") return "bg-amber-600/10 border-amber-200 text-amber-900";
+  return "bg-gray-600/10 border-gray-200 text-gray-900";
+}
+
+type CalendarBlock = {
+  entry: TimetableEntry;
+  meeting: Meeting;
+  day: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
+  startMin: number;
+  endMin: number;
+  conflict: boolean;
+};
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface Suggestion {
@@ -58,16 +107,51 @@ interface ApiResponse {
   pageSize: number;
 }
 
+type TimetableEntry = {
+  id: string;
+  course_code: string;
+  title: string;
+  session: string;
+  section_code: string;
+  type: string;
+  meetings: Meeting[];
+};
+
+type Conflict = {
+  a: { id: string; course_code: string; section_code: string };
+  b: { id: string; course_code: string; section_code: string };
+  day: string;
+  start_time: string;
+  end_time: string;
+};
+
+type TimetableState = {
+  entries: TimetableEntry[];
+  conflicts: Conflict[];
+  warning?: string;
+  error?: string;
+};
+
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function SectionCard({ sec }: { sec: Section }) {
+function SectionCard({
+  sec,
+  action,
+}: {
+  sec: Section;
+  action?: {
+    label: string;
+    disabled: boolean;
+    onClick: () => void;
+  };
+}) {
   const { enrolled, capacity } = sec.availability;
   const fillPct = capacity > 0 ? Math.min(100, (enrolled / capacity) * 100) : 0;
 
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeColor(sec.type)}`}>
             {sec.section_code}
           </span>
@@ -77,7 +161,19 @@ function SectionCard({ sec }: { sec: Section }) {
             </span>
           )}
         </div>
-        <span className="text-xs text-gray-400">{sec.delivery_mode}</span>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400">{sec.delivery_mode}</span>
+          {action && (
+            <button
+              onClick={action.onClick}
+              disabled={action.disabled}
+              className="rounded-lg bg-[#002A5C] px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-[#003875] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              {action.label}
+            </button>
+          )}
+        </div>
       </div>
 
       {sec.instructors.length > 0 && (
@@ -121,14 +217,186 @@ function SectionCard({ sec }: { sec: Section }) {
   );
 }
 
-function CourseModal({ course, onClose }: { course: Course; onClose: () => void }) {
+function Calendar({
+  entries,
+  conflicts,
+  onRemoveEntry,
+}: {
+  entries: TimetableEntry[];
+  conflicts: Conflict[];
+  onRemoveEntry: (entryId: string) => void;
+}) {
+  const startHour = 8;
+  const endHour = 21;
+  const minutesPerDay = (endHour - startHour) * 60;
+
+  const conflictIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of conflicts) {
+      s.add(c.a.id);
+      s.add(c.b.id);
+    }
+    return s;
+  }, [conflicts]);
+
+  const blocksByDay = useMemo(() => {
+    const by: Record<string, CalendarBlock[]> = { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] };
+    for (const e of entries) {
+      for (const m of e.meetings || []) {
+        const dk = dayKey(m.day);
+        if (!dk) continue;
+        const s = timeToMinutes(m.start_time);
+        const en = timeToMinutes(m.end_time);
+        if (s === null || en === null) continue;
+        // clamp
+        const startMin = Math.max(startHour * 60, s);
+        const endMin = Math.min(endHour * 60, en);
+        if (endMin <= startMin) continue;
+        by[dk].push({
+          entry: e,
+          meeting: m,
+          day: dk,
+          startMin,
+          endMin,
+          conflict: conflictIds.has(e.id),
+        });
+      }
+    }
+
+    for (const k of Object.keys(by)) {
+      by[k].sort((a, b) => a.startMin - b.startMin);
+    }
+
+    return by;
+  }, [entries, conflictIds]);
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-gray-900">Weekly Timetable</h2>
+          <p className="text-xs text-gray-400">Mon–Fri · {startHour}:00–{endHour}:00</p>
+        </div>
+        <div className="text-xs text-gray-400">{entries.length} section{entries.length !== 1 ? "s" : ""}</div>
+      </div>
+
+      <div className="grid grid-cols-[64px_repeat(5,1fr)]">
+        {/* Header row */}
+        <div className="bg-gray-50 border-b border-gray-100" />
+        {DAYS.map((d) => (
+          <div key={d.key} className="bg-gray-50 border-b border-gray-100 px-3 py-2">
+            <div className="text-xs font-semibold text-gray-700">{d.label}</div>
+          </div>
+        ))}
+
+        {/* Body */}
+        <div className="relative bg-white border-r border-gray-100" style={{ height: `${minutesPerDay}px` }}>
+          {Array.from({ length: endHour - startHour + 1 }, (_, i) => {
+            const h = startHour + i;
+            return (
+              <div
+                key={h}
+                className="absolute left-0 right-0 border-t border-gray-100 text-[10px] text-gray-400"
+                style={{ top: `${i * 60}px` }}
+              >
+                <div className="-translate-y-2 px-2">{h}:00</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {DAYS.map((d) => (
+          <div
+            key={d.key}
+            className="relative bg-white border-r border-gray-100 last:border-r-0"
+            style={{ height: `${minutesPerDay}px` }}
+          >
+            {Array.from({ length: endHour - startHour }, (_, i) => (
+              <div
+                key={i}
+                className="absolute left-0 right-0 border-t border-gray-50"
+                style={{ top: `${i * 60}px` }}
+              />
+            ))}
+
+            {(blocksByDay[d.key] || []).map((b, idx) => {
+              const top = b.startMin - startHour * 60;
+              const height = Math.max(24, b.endMin - b.startMin);
+              const classes = entryColor(b.entry.type);
+              return (
+                <div
+                  key={`${b.entry.id}-${b.meeting.day}-${b.meeting.start_time}-${idx}`}
+                  className={`absolute left-2 right-2 rounded-xl border p-2 shadow-sm ${classes} ${
+                    b.conflict ? "ring-2 ring-red-400/60" : ""
+                  }`}
+                  style={{ top: `${top}px`, height: `${height}px` }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] font-bold">{b.entry.course_code}</span>
+                        <span className="text-[11px] font-semibold">{b.entry.section_code}</span>
+                        <span className="text-[10px] rounded px-1.5 py-0.5 bg-white/60 border border-white/40">
+                          {b.entry.type}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-gray-700 truncate">{b.meeting.start_time}–{b.meeting.end_time}</div>
+                      {b.meeting.location && b.meeting.location !== "TBA" && (
+                        <div className="text-[10px] text-gray-500 truncate">{b.meeting.location}</div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => onRemoveEntry(b.entry.id)}
+                      className="shrink-0 rounded-md border border-gray-200 bg-white/70 px-2 py-1 text-[10px] font-semibold text-gray-700 hover:bg-white transition"
+                      title="Remove section"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {conflicts.length > 0 && (
+        <div className="px-5 py-4 border-t border-gray-100 bg-red-50">
+          <div className="text-xs font-semibold text-red-800 mb-2">Conflicts ({conflicts.length})</div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {conflicts.slice(0, 6).map((c, idx) => (
+              <div key={idx} className="rounded-lg border border-red-200 bg-white/60 px-3 py-2 text-xs text-red-900">
+                {c.a.course_code} {c.a.section_code} ↔ {c.b.course_code} {c.b.section_code} · {c.day} · {c.start_time}–{c.end_time}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Update CourseModal signature usage: now adds default LEC+TUT via API
+function CourseModal({
+  course,
+  onClose,
+  onAddSection,
+  isSectionAdded,
+}: {
+  course: Course;
+  onClose: () => void;
+  onAddSection: (course: Course, section_code: string) => void;
+  isSectionAdded: (course: Course, section_code: string) => boolean;
+}) {
   const lecs = course.sections.filter((s) => s.type === "LEC");
   const tuts = course.sections.filter((s) => s.type === "TUT");
   const pras = course.sections.filter((s) => s.type === "PRA");
   const other = course.sections.filter((s) => !["LEC", "TUT", "PRA"].includes(s.type));
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
@@ -150,9 +418,10 @@ function CourseModal({ course, onClose }: { course: Course; onClose: () => void 
             </div>
             <h2 className="text-xl font-bold text-gray-900 leading-snug">{course.title}</h2>
           </div>
+
           <button
             onClick={onClose}
-            className="shrink-0 rounded-full p-2 hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700"
+            className="rounded-full p-2 hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -174,85 +443,59 @@ function CourseModal({ course, onClose }: { course: Course; onClose: () => void 
           {(course.prerequisites || course.corequisites || course.exclusions) && (
             <div className="rounded-xl bg-gray-50 p-4 space-y-2 text-sm">
               {course.prerequisites && (
-                <div><span className="font-semibold text-gray-700">Prerequisites: </span><span className="text-gray-600">{course.prerequisites}</span></div>
+                <div>
+                  <span className="font-semibold text-gray-700">Prerequisites: </span>
+                  <span className="text-gray-600">{course.prerequisites}</span>
+                </div>
               )}
               {course.corequisites && (
-                <div><span className="font-semibold text-gray-700">Corequisites: </span><span className="text-gray-600">{course.corequisites}</span></div>
+                <div>
+                  <span className="font-semibold text-gray-700">Corequisites: </span>
+                  <span className="text-gray-600">{course.corequisites}</span>
+                </div>
               )}
               {course.exclusions && (
-                <div><span className="font-semibold text-gray-700">Exclusions: </span><span className="text-gray-600">{course.exclusions}</span></div>
+                <div>
+                  <span className="font-semibold text-gray-700">Exclusions: </span>
+                  <span className="text-gray-600">{course.exclusions}</span>
+                </div>
               )}
             </div>
           )}
 
-          {[{ label: "Lectures", items: lecs }, { label: "Tutorials", items: tuts }, { label: "Practicals", items: pras }, { label: "Other", items: other }]
+          {[
+            { label: "Lectures", items: lecs },
+            { label: "Tutorials", items: tuts },
+            { label: "Practicals", items: pras },
+            { label: "Other", items: other },
+          ]
             .filter(({ items }) => items.length > 0)
             .map(({ label, items }) => (
               <div key={label}>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{label}</h3>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  {label}
+                </h3>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {items.map((sec) => <SectionCard key={sec.section_code} sec={sec} />)}
+                  {items.map((sec) => {
+                    const added = isSectionAdded(course, sec.section_code);
+                    return (
+                      <SectionCard
+                        key={sec.section_code}
+                        sec={sec}
+                        action={{
+                          label: added ? "Added" : "Add",
+                          disabled: added,
+                          onClick: () => onAddSection(course, sec.section_code),
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             ))}
         </div>
       </div>
     </div>
-  );
-}
-
-function CourseCard({ course, onClick }: { course: Course; onClick: () => void }) {
-  const lecCount = course.sections.filter((s) => s.type === "LEC").length;
-  const tutCount = course.sections.filter((s) => s.type === "TUT").length;
-  const praCount = course.sections.filter((s) => s.type === "PRA").length;
-  const instructors = [...new Set(course.sections.filter((s) => s.type === "LEC").flatMap((s) => s.instructors))].slice(0, 2);
-  const lecs = course.sections.filter((s) => s.type === "LEC" && s.availability.capacity > 0);
-  const avgFill = lecs.length > 0
-    ? lecs.reduce((sum, s) => sum + s.availability.enrolled / s.availability.capacity, 0) / lecs.length
-    : 0;
-
-  return (
-    <button
-      onClick={onClick}
-      className="group text-left w-full rounded-2xl border border-gray-200 bg-white p-5 shadow-sm hover:shadow-md hover:border-[#002A5C]/30 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002A5C]"
-    >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="font-mono text-xs font-bold text-[#002A5C] bg-blue-50 rounded-lg px-2 py-1">
-          {course.course_code}
-        </span>
-        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${sessionColor(course.session)}`}>
-          {sessionLabel(course.session)}
-        </span>
-      </div>
-
-      <h3 className="text-sm font-semibold text-gray-900 leading-snug mb-2 group-hover:text-[#002A5C] transition-colors line-clamp-2">
-        {course.title}
-      </h3>
-
-      {instructors.length > 0 && (
-        <p className="text-xs text-gray-500 mb-3 truncate">
-          👤 {instructors.join(", ")}
-        </p>
-      )}
-
-      {lecs.length > 0 && (
-        <div className="mb-3">
-          <div className="h-1 w-full rounded-full bg-gray-100 overflow-hidden">
-            <div
-              className={`h-full rounded-full ${fillColor(avgFill * 100, 100)}`}
-              style={{ width: `${Math.min(100, avgFill * 100)}%` }}
-            />
-          </div>
-          <p className="text-xs text-gray-400 mt-1">{Math.round(avgFill * 100)}% avg enrolment</p>
-        </div>
-      )}
-
-      <div className="flex gap-1.5 flex-wrap">
-        {lecCount > 0 && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">{lecCount} LEC</span>}
-        {tutCount > 0 && <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600">{tutCount} TUT</span>}
-        {praCount > 0 && <span className="rounded-full bg-yellow-50 px-2 py-0.5 text-xs font-medium text-yellow-700">{praCount} PRA</span>}
-      </div>
-    </button>
   );
 }
 
@@ -273,17 +516,81 @@ export default function TimetablePage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const PAGE_SIZE = 12;
 
+  const [timetable, setTimetable] = useState<TimetableState>({ entries: [], conflicts: [] });
+  const [ttLoading, setTtLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const [showSearch, setShowSearch] = useState(false);
+
+  const fetchTimetable = useCallback(async () => {
+    setTtLoading(true);
+    try {
+      const res = await fetch("/api/timetable", { cache: "no-store" });
+      setTimetable(await res.json());
+    } catch {
+      // ignore
+    } finally {
+      setTtLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTimetable();
+  }, [fetchTimetable]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const removeEntry = useCallback(async (entryId: string) => {
+    setTtLoading(true);
+    try {
+      const res = await fetch("/api/timetable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "remove", entryId }),
+      });
+      setTimetable((await res.json()) as TimetableState);
+    } finally {
+      setTtLoading(false);
+    }
+  }, []);
+
+  const clearTimetable = useCallback(async () => {
+    setTtLoading(true);
+    try {
+      const res = await fetch("/api/timetable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear" }),
+      });
+      setTimetable((await res.json()) as TimetableState);
+      setToast("Timetable cleared");
+    } finally {
+      setTtLoading(false);
+    }
+  }, []);
+
   const fetchCourses = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ q: query, page: String(page), pageSize: String(PAGE_SIZE), session });
     try {
       const res = await fetch(`/api/courses?${params}`);
       setData(await res.json());
-    } catch { setData(null); }
-    finally { setLoading(false); }
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
   }, [query, page, session]);
 
-  useEffect(() => { fetchCourses(); }, [fetchCourses]);
+  // Only fetch when search drawer is open.
+  useEffect(() => {
+    if (!showSearch) return;
+    fetchCourses();
+  }, [fetchCourses, showSearch]);
 
   useEffect(() => {
     if (inputValue.length < 2) { setSuggestions([]); setShowDropdown(false); return; }
@@ -318,6 +625,45 @@ export default function TimetablePage() {
 
   const totalPages = data?.totalPages ?? 1;
 
+  const addSection = useCallback(async (course: Course, section_code: string) => {
+    setTtLoading(true);
+    try {
+      const sec = course.sections.find((s) => s.section_code === section_code);
+      const type = sec?.type;
+      const sectionsPayload: { lec?: string; tut?: string; pra?: string } = {};
+      if (type === "LEC") sectionsPayload.lec = section_code;
+      else if (type === "TUT") sectionsPayload.tut = section_code;
+      else if (type === "PRA") sectionsPayload.pra = section_code;
+      else {
+        // Fallback: still try to add as a lecture
+        sectionsPayload.lec = section_code;
+      }
+
+      const res = await fetch("/api/timetable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add",
+          course_code: course.course_code,
+          session: course.session,
+          sections: sectionsPayload,
+        }),
+      });
+      const next = (await res.json()) as TimetableState;
+      setTimetable(next);
+      if (next.warning) setToast(next.warning);
+      if (next.error) setToast(next.error);
+    } finally {
+      setTtLoading(false);
+    }
+  }, []);
+
+  const isSectionAdded = useCallback(
+    (course: Course, section_code: string) =>
+      timetable.entries.some((e) => e.course_code === course.course_code && e.section_code === section_code),
+    [timetable.entries]
+  );
+
   return (
     <div className="min-h-screen bg-[#f5f7fb]">
       {/* Navbar */}
@@ -325,153 +671,191 @@ export default function TimetablePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-white font-black text-sm">U</div>
-            <span className="text-white font-bold text-base tracking-tight">UofT Course Explorer</span>
+            <span className="text-white font-bold text-base tracking-tight">UofT Timetable</span>
           </div>
-          <span className="ml-auto text-white/50 text-xs hidden sm:block">Arts &amp; Science · 2025–26</span>
+
+          <button
+            onClick={() => setShowSearch(true)}
+            className="ml-auto rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15 transition"
+          >
+            Add courses
+          </button>
+
+          <button
+            onClick={clearTimetable}
+            disabled={timetable.entries.length === 0 || ttLoading}
+            className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition"
+          >
+            Clear
+          </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Find Your Courses</h1>
-          <p className="text-sm text-gray-500 mb-5">
-            Search across {data ? data.total.toLocaleString() : "3,000+"} Arts &amp; Science courses
-          </p>
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+        <Calendar entries={timetable.entries} conflicts={timetable.conflicts} onRemoveEntry={removeEntry} />
+      </main>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <div className="relative">
-                <svg className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7 7 0 1116.65 16.65z" />
-                </svg>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputValue}
-                  placeholder="Search by code or title (e.g. CSC311, Machine Learning)…"
-                  className="w-full rounded-xl border border-gray-200 bg-white pl-11 pr-10 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#002A5C]/30 focus:border-[#002A5C] transition"
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
-                  autoComplete="off"
-                />
-                {inputValue && (
-                  <button className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                    onClick={() => { setInputValue(""); commitSearch(""); inputRef.current?.focus(); }}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
+      {/* Search Drawer */}
+      {showSearch && (
+        <div className="fixed inset-0 z-40">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowSearch(false)} />
+          <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold text-gray-900">Add courses</div>
+                <div className="text-xs text-gray-400">Adds default LEC + TUT/PRA (you’ll be able to choose sections next)</div>
               </div>
+              <button
+                onClick={() => setShowSearch(false)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition"
+              >
+                Close
+              </button>
+            </div>
 
-              {/* Autocomplete dropdown */}
-              {showDropdown && suggestions.length > 0 && (
-                <div ref={dropdownRef} className="absolute top-full mt-1.5 w-full rounded-xl border border-gray-200 bg-white shadow-xl z-40 overflow-hidden">
-                  {suggestions.map((s, i) => (
-                    <button
-                      key={s.course_code}
-                      className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-blue-50 transition-colors ${i === activeIdx ? "bg-blue-50" : ""}`}
-                      onMouseDown={(e) => { e.preventDefault(); commitSearch(s.course_code); }}
-                    >
-                      <span className="font-mono text-xs font-bold text-[#002A5C] bg-blue-50 rounded px-1.5 py-0.5 shrink-0">{s.course_code}</span>
-                      <span className="text-sm text-gray-700 truncate">{s.title}</span>
-                    </button>
+            <div className="p-5 border-b border-gray-100">
+              <div className="flex gap-3">
+                <div className="relative flex-1">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    placeholder="Search (e.g. CSC311)"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#002A5C]/30 focus:border-[#002A5C] transition"
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
+                    autoComplete="off"
+                  />
+
+                  {showDropdown && suggestions.length > 0 && (
+                    <div ref={dropdownRef} className="absolute top-full mt-1.5 w-full rounded-xl border border-gray-200 bg-white shadow-xl z-40 overflow-hidden">
+                      {suggestions.map((s, i) => (
+                        <button
+                          key={s.course_code}
+                          className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-blue-50 transition-colors ${
+                            i === activeIdx ? "bg-blue-50" : ""
+                          }`}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            commitSearch(s.course_code);
+                          }}
+                        >
+                          <span className="font-mono text-xs font-bold text-[#002A5C] bg-blue-50 rounded px-1.5 py-0.5 shrink-0">{s.course_code}</span>
+                          <span className="text-sm text-gray-700 truncate">{s.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <select
+                  value={session}
+                  onChange={(e) => {
+                    setSession(e.target.value);
+                    setPage(1);
+                  }}
+                  className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#002A5C]/30 focus:border-[#002A5C] transition w-40 cursor-pointer"
+                >
+                  {Object.entries(SESSION_LABELS).map(([val, label]) => (
+                    <option key={val} value={val}>
+                      {label}
+                    </option>
                   ))}
+                </select>
+
+                <button
+                  onClick={() => {
+                    commitSearch(inputValue);
+                    fetchCourses();
+                  }}
+                  className="rounded-xl bg-[#002A5C] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#003875] transition-colors"
+                >
+                  Search
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {loading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="w-10 h-10 rounded-full border-4 border-[#002A5C]/20 border-t-[#002A5C] animate-spin" />
+                </div>
+              ) : data && data.items.length === 0 ? (
+                <div className="text-sm text-gray-500">No results.</div>
+              ) : (
+                <div className="space-y-3">
+                  {data?.items.map((course) => (
+                    <div
+                      key={`${course.course_code}-${course.session}`}
+                      className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-[#002A5C] bg-blue-50 rounded px-2 py-1">
+                              {course.course_code}
+                            </span>
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${sessionColor(course.session)}`}>
+                              {sessionLabel(course.session)}
+                            </span>
+                          </div>
+                          <div className="text-sm font-semibold text-gray-900 mt-2 line-clamp-2">{course.title}</div>
+                        </div>
+                        <div className="shrink-0 flex flex-col gap-2">
+                          <button
+                            onClick={() => setSelected(course)}
+                            className="rounded-xl bg-[#002A5C] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#003875] transition"
+                          >
+                            Choose sections
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {totalPages > 1 && (
+                    <div className="pt-3 flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      >
+                        Prev
+                      </button>
+                      <div className="text-sm text-gray-400">
+                        Page {page} / {totalPages}
+                      </div>
+                      <button
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                        className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-
-            <select
-              value={session}
-              onChange={(e) => { setSession(e.target.value); setPage(1); }}
-              className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#002A5C]/30 focus:border-[#002A5C] transition sm:w-44 cursor-pointer"
-            >
-              {Object.entries(SESSION_LABELS).map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
-              ))}
-            </select>
-
-            <button
-              onClick={() => commitSearch(inputValue)}
-              className="rounded-xl bg-[#002A5C] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#003875] active:bg-[#001f45] transition-colors"
-            >
-              Search
-            </button>
           </div>
         </div>
+      )}
 
-        {/* Results */}
-        {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 rounded-full border-4 border-[#002A5C]/20 border-t-[#002A5C] animate-spin" />
-              <p className="text-sm text-gray-400">Loading courses…</p>
-            </div>
-          </div>
-        ) : data && data.items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="text-5xl mb-4">🔍</div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-1">No courses found</h3>
-            <p className="text-sm text-gray-400">Try a different search term or remove filters</p>
-          </div>
-        ) : (
-          <>
-            {data && (
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-gray-500">
-                  <span className="font-semibold text-gray-800">{data.total.toLocaleString()}</span>{" "}
-                  course{data.total !== 1 ? "s" : ""} found
-                  {query && <span> for &ldquo;<span className="font-medium text-gray-700">{query}</span>&rdquo;</span>}
-                </p>
-                <p className="text-sm text-gray-400">Page {data.page} of {data.totalPages}</p>
-              </div>
-            )}
+      {selected && (
+        <CourseModal
+          course={selected}
+          onClose={() => setSelected(null)}
+          onAddSection={addSection}
+          isSectionAdded={isSectionAdded}
+        />
+      )}
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {data?.items.map((course) => (
-                <CourseCard
-                  key={`${course.course_code}-${course.session}`}
-                  course={course}
-                  onClick={() => setSelected(course)}
-                />
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-8 flex items-center justify-center gap-2">
-                <button onClick={() => setPage(1)} disabled={page === 1}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">«</button>
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                  className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">‹ Prev</button>
-
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let p: number;
-                  if (totalPages <= 5) p = i + 1;
-                  else if (page <= 3) p = i + 1;
-                  else if (page >= totalPages - 2) p = totalPages - 4 + i;
-                  else p = page - 2 + i;
-                  return (
-                    <button key={p} onClick={() => setPage(p)}
-                      className={`rounded-lg px-3.5 py-2 text-sm font-medium transition ${p === page ? "bg-[#002A5C] text-white shadow-sm" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
-                      {p}
-                    </button>
-                  );
-                })}
-
-                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">Next ›</button>
-                <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">»</button>
-              </div>
-            )}
-          </>
-        )}
-      </main>
-
-      {selected && <CourseModal course={selected} onClose={() => setSelected(null)} />}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="rounded-xl bg-gray-900 text-white px-4 py-2 text-sm shadow-lg">{toast}</div>
+        </div>
+      )}
     </div>
   );
 }
