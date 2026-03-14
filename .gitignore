@@ -1,0 +1,9 @@
+.env
+backend/.env
+backend/venv/
+backend/__pycache__/
+backend/chroma_db/
+backend/copilot.db
+frontend/.env.local
+node_modules/
+.DS_Store
