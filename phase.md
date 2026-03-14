@@ -1,0 +1,84 @@
+# UofT AI Copilot - Hackathon Phases & Sidequests
+
+This document outlines our game plan for the 30-hour hackathon, broken down into 5 phases. For each phase, we detail the core goals, the exact tech stack to use, and **Sidequests**—bonus tasks that team members can pick up if they have extra time or want to add "wow factor."
+
+---
+
+## Phase 1: Setup & Data Ingestion (Hours 0-6)
+**Main Goal:** Get all the raw data we need from UofT sources.
+**Tech Stack:** Python, `requests`, `BeautifulSoup4`, `playwright`, `praw`, `PyMuPDF`.
+
+### Core Tasks:
+- [x] Scrape UofT Course Calendar (HTML parsing).
+- [x] Intercept Timetable Builder API (Playwright).
+- [x] Scrape Reddit r/UofT sentiment (PRAW).
+- [x] Parse Syllabus PDFs into chunks (PyMuPDF).
+
+### Sidequests 🏹:
+- **Repo Scaffolding:** Set up the Next.js frontend and FastAPI backend folders (✅ Done).
+- **Team Log:** Create a `log.md` so teammates' AI agents have shared context (✅ Done).
+- **More Sources:** Find additional sources of UofT data (e.g., RateMyProf ratings). 
+
+---
+
+## Phase 2: Data Normalization & Vector Indexing (Hours 6-12)
+**Main Goal:** Turn messy raw JSON and text into a structured SQL database and a searchable Vector Database.
+**Tech Stack:** Python, `sqlite3` (or `SQLAlchemy`), `ChromaDB`, OpenAI `text-embedding-3-small`, `langchain-text-splitters`.
+
+### Core Tasks:
+- Design and build the SQLite schema (`courses`, `sections`, `meetings`).
+- Write a script to insert `courses.json` and `timetable_playwright_sample.json` into SQLite.
+- Write a script to chunk Reddit text, Syllabi, and academic rules, then embed them into ChromaDB.
+
+### Sidequests 🏹:
+- **Rulebook RAG:** Index the `general_academic_info` markdown files (e.g., `understanding_courses.md`, `course_enrolment.md`) into ChromaDB so the chatbot knows the actual university rules.
+- **Auto-Reset DB:** Write a clean `make_db.sh` or Python script that dropping and recreating the databases from scratch so testing is easy.
+- **Sanity Check CLI:** Build a tiny terminal script that lets you type a query and proves ChromaDB returns the right chunks.
+
+---
+
+## Phase 3: Core App Endpoints & RAG Pipeline (Hours 12-18)
+**Main Goal:** Build the API layer that the frontend will consume.
+**Tech Stack:** `FastAPI`, `Pydantic` (for typing), OpenAI `gpt-4o-mini`, Prompt Engineering.
+
+### Core Tasks:
+- Create `/api/chat` endpoint: Takes user message, queries ChromaDB for context, queries SQLite for hard facts, and asks LLM to answer.
+- Create `/api/courses/{code}` endpoint: Returns structured JSON for a specific course for UI display.
+
+### Sidequests 🏹:
+- **Memory:** Implement session state/chat history (either in-memory dictionary or a `sessions` table in SQLite) so the chatbot remembers follow-up questions.
+- **Streaming:** Make the `/api/chat` endpoint stream the response token-by-token (Server-Sent Events) so the UI feels fast.
+- **Course Comparer:** Build an endpoint specifically optimized to compare two courses side-by-side using LLM reasoning.
+
+---
+
+## Phase 4: Timetable Scheduler Logic (Hours 18-24)
+**Main Goal:** Algorithmic generation of conflict-free schedules.
+**Tech Stack:** Pure Python algorithms, strict testing.
+
+### Core Tasks:
+- Build the core algorithm: Take a list of desired courses, generate all valid permutations of sections (LEC/TUT/PRA), and filter out time conflicts.
+- Create `/api/schedule/generate` endpoint.
+
+### Sidequests 🏹:
+- **Preference Scoring:** Add logic to score schedules based on user preferences (e.g., "Give me a schedule with no 9 AMs" -> sort those to the top).
+- **Walking distance:** If room data is available, penalize schedules that require running across campus in 10 minutes.
+- **AI Explanation:** Have the LLM append a 1-sentence summary of *why* it thinks 
+a specific schedule is the best.
+
+---
+
+## Phase 5: Frontend & Polish (Hours 24-30)
+**Main Goal:** Build a beautiful, flashy UI for the judges.
+**Tech Stack:** Next.js (App Router), Tailwind CSS, `shadcn-ui`, `framer-motion` (for animations), `react-markdown`.
+
+### Core Tasks:
+- Build the **Chat Advisor Tab** (chat interface with the LLM).
+- Build the **Timetable Visualizer Tab** (a calendar grid showing the generated schedules).
+- Connect the React components to the FastAPI endpoints.
+
+### Sidequests 🏹:
+- **Dark Mode:** Implement a sleek dark mode toggle. 
+- **Micro-animations:** Add `framer-motion` to make messages pop in and modals slide smoothly. The UI *must* look premium.
+- **Deploy:** Host the frontend on Vercel and the backend on Render/Railway so anyone can try it during the demo.
+- **Citations UI:** Make the chat interface show clickable "Source tags" (e.g., [Syllabus], [Reddit]) when the LLM makes a claim.

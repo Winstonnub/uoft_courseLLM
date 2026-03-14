@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Timetable Calendar Schedule",
+  "type": "object",
+  "properties": {
+    "student_id": { "type": "string" },
+    "term": { "type": "string" },
+    "schedule": {
+      "type": "object",
+      "properties": {
+        "Monday": { "$ref": "#/definitions/DaySchedule" },
+        "Tuesday": { "$ref": "#/definitions/DaySchedule" },
+        "Wednesday": { "$ref": "#/definitions/DaySchedule" },
+        "Thursday": { "$ref": "#/definitions/DaySchedule" },
+        "Friday": { "$ref": "#/definitions/DaySchedule" }
+      }
+    }
+  },
+  "definitions": {
+    "DaySchedule": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "course_code": { "type": "string" },
+          "course_title": { "type": "string" },
+          "section_code": { "type": "string" },
+          "start_time": { "type": "string" },
+          "end_time": { "type": "string" },
+          "location": { "type": "string" },
+          "instructors": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
