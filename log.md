@@ -46,3 +46,26 @@ We have successfully set up the foundation of the monorepo and created the scrap
 ### Context for Teammates (Next Actions)
 1. **Sujoy**: Please acquire the remaining dynamic TTB data, syllabus PDFs, and Reddit data so we can chunk and index them into our new SQLite and Chroma schemas as well. Then move those into `ingestion/raw_data`.
 2. **Kiko**: Please start bringing up the frontend Next.js interface components (Chat UI, Timetable block UI) anticipating the FastAPI endpoints Winston will build in Phase 3.
+
+---
+
+## Completed in Phase 3 (Core App Endpoints & RAG)
+
+### 1. Reusable Pydantic Models (Winston)
+- **What I did**: Defined strictly typed data models for our FastAPI server.
+- **How I did it**: Wrote `backend/models.py` defining `ChatRequest`, `ChatResponse`, and `CourseDetails` using `pydantic.BaseModel`.
+- **What it's for**: Ensures the frontend sends and receives clean, validated JSON, preventing common runtime errors.
+
+### 2. Retrieval-Augmented Generation Service (Winston)
+- **What I did**: Created the core intelligence engine for the Chat Advisor.
+- **How I did it**: Build `backend/services/rag.py` using `Langchain` and OpenAI's `gpt-4o-mini`. It intercepts the user's message, performs a vector similarity search on ChromaDB, fetches structured prerequisites from SQLite, and injects everything into a master System Prompt.
+- **What it's for**: Gives the generic ChatGPT model extremely focused, accurate, and up-to-date knowledge about UofT courses and academic rules.
+
+### 3. FastAPI Endpoint Routers (Winston)
+- **What I did**: Built and mounted the Web API routes.
+- **How I did it**: Created `backend/api/courses.py` (for catalog browsing) and `backend/api/chat.py` (for the AI advisor). Included both routers inside the main application instance in `backend/main.py`.
+- **What it's for**: These are the actual URLs Kiko's Next.js frontend will communicate with via HTTP `fetch` to power the user interface.
+
+### Context for Teammates (Next Actions)
+1. **Winston**: Now moving to Phase 4 (Timetable Scheduler Logic) to build the conflict-detecting algorithm.
+2. **Kiko**: The endpoints (`/api/chat` and `/api/courses`) are completely ready for integration! You can build the Chat Interface and hit these URLs now.
