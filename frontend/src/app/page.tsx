@@ -321,13 +321,20 @@ export default function TimetablePage() {
   return (
     <div className="min-h-screen bg-[#f5f7fb]">
       {/* Navbar */}
-      <header className="sticky top-0 z-30 bg-[#002A5C] shadow-lg">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-white font-black text-sm">U</div>
-            <span className="text-white font-bold text-base tracking-tight">UofT Course Explorer</span>
+      <header className="sticky top-0 z-30 bg-[#002A5C] shadow-lg shrink-0">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-white font-black text-sm">U</div>
+              <span className="text-white font-bold text-base tracking-tight">UofT Course Explorer</span>
+            </a>
           </div>
-          <span className="ml-auto text-white/50 text-xs hidden sm:block">Arts &amp; Science · 2025–26</span>
+          <div className="flex gap-4 items-center">
+            <span className="text-white/50 text-xs hidden sm:block mr-2">Arts &amp; Science · 2025–26</span>
+            <a href="/chat" className="px-3 py-1 rounded-full border border-white/20 hover:bg-white/10 text-white text-sm font-semibold transition flex items-center gap-1.5">
+              <span>🤖</span> Copilot Chat
+            </a>
+          </div>
         </div>
       </header>
 

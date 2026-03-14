@@ -52,30 +52,34 @@ This document outlines our game plan for the 30-hour hackathon, broken down into
 
 ---
 
-## Phase 4: Timetable Scheduler Logic (Hours 18-24)
-**Main Goal:** Algorithmic generation of conflict-free schedules.
-**Tech Stack:** Pure Python algorithms, strict testing.
+## Phase 4: Frontend Chat Interface & LLM Integration (Hours 18-24)
+**Main Goal:** Build a beautiful, ChatGPT-style React UI to talk to our RAG backend.
+**Tech Stack:** Next.js (App Router), Tailwind CSS, `framer-motion` (for animations), `react-markdown`.
 
 ### Core Tasks:
-- Build the core algorithm: Take a list of desired courses, generate all valid permutations of sections (LEC/TUT/PRA), and filter out time conflicts.
-- Create `/api/schedule/generate` endpoint.
+- Set up Shadcn UI for standard base components.
+- Build the **Chat Advisor Tab**: A sleek messaging interface that hits `/api/chat`.
+- Implement message state, loading spinners, and markdown rendering.
 
 ### Sidequests 🏹:
-- **Preference Scoring:** Add logic to score schedules based on user preferences (e.g., "Give me a schedule with no 9 AMs" -> sort those to the top).
-- **Walking distance:** If room data is available, penalize schedules that require running across campus in 10 minutes.
-- **AI Explanation:** Have the LLM append a 1-sentence summary of *why* it thinks 
-a specific schedule is the best.
+- **Streaming UI:** If the backend supports it, make the text stream in.
+- **Citations UI:** Make the chat interface show clickable "Source tags" (e.g., [Syllabus], [Academic Rules]) when the LLM makes a claim.
+- **Dark Mode:** Implement a sleek dark mode toggle.
 
 ---
 
-## Phase 5: Frontend & Polish (Hours 24-30)
-**Main Goal:** Build a beautiful, flashy UI for the judges.
-**Tech Stack:** Next.js (App Router), Tailwind CSS, `shadcn-ui`, `framer-motion` (for animations), `react-markdown`.
+## Phase 5: Timetable Scheduler Logic & UI (Hours 24-30)
+**Main Goal:** Algorithmic generation of conflict-free schedules and a calendar frontend to view them.
+**Tech Stack:** Pure Python algorithms for backend, React calendar grids for frontend.
 
 ### Core Tasks:
-- Build the **Chat Advisor Tab** (chat interface with the LLM).
-- Build the **Timetable Visualizer Tab** (a calendar grid showing the generated schedules).
-- Connect the React components to the FastAPI endpoints.
+- Build the core algorithm in Python: Take a list of desired courses, generate all valid permutations of sections (LEC/TUT/PRA), and filter out time conflicts.
+- Create `/api/schedule/generate` endpoint.
+- Build the **Timetable Visualizer Tab** on the Next.js frontend to display the generated schedules.
+
+### Sidequests 🏹:
+- **Preference Scoring:** Add logic to score schedules based on user preferences.
+- **Micro-animations:** Add `framer-motion` to make the timetable blocks pop in.
 
 ### Sidequests 🏹:
 - **Dark Mode:** Implement a sleek dark mode toggle. 
