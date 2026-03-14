@@ -14,21 +14,19 @@ router = APIRouter(
 
 class ScheduleRequest(BaseModel):
     course_codes: List[str]
-    session: Optional[str] = None
     max_schedules: int = 5
 
 @router.post("/generate")
 async def generate_schedule(request: ScheduleRequest):
     """
-    Generate non-conflicting timetable schedules.
+    Generate session-aware, conflict-free timetable schedules.
     
-    Accepts a list of course codes the user wants to take.
-    Returns up to `max_schedules` valid schedules ranked by seat availability,
-    along with warnings about full/waitlisted sections.
+    Accepts a list of course codes. Returns separate Fall and Winter
+    timetables. Full-year (Y) courses are locked to the same section
+    in both semesters.
     """
     result = generate_schedules(
         course_codes=request.course_codes,
-        session=request.session,
         max_schedules=request.max_schedules,
     )
     return result

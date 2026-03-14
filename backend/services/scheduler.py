@@ -1,11 +1,13 @@
 """
-Schedule Generator Service
+Session-Aware Schedule Generator
 
-Accepts a list of course codes, loads their sections from timetable_full.json,
-and generates all valid (non-conflicting) combinations of LEC/TUT/PRA sections.
+Produces SEPARATE Fall and Winter timetables.
+Full-year (Y) courses are locked to the same section in both semesters.
 
-Returns up to `max_schedules` valid schedules ranked by enrollment availability,
-along with warnings about full/waitlisted sections.
+Course code suffixes:
+  F → Fall only   (session "20259")
+  S → Winter only (session "20261")
+  Y → Full year   (session "20259, 20261")
 """
 
 import json
@@ -20,6 +22,7 @@ DATA_PATH = os.path.join(
 
 _courses_cache: Optional[List[Dict]] = None
 
+
 def _load_courses() -> List[Dict]:
     global _courses_cache
     if _courses_cache is None:
@@ -27,8 +30,8 @@ def _load_courses() -> List[Dict]:
             _courses_cache = json.load(f)
     return _courses_cache
 
+
 def _parse_time(t: str) -> Optional[int]:
-    """Convert '10:00 AM' to minutes since midnight (600)."""
     if not t or t == "TBA":
         return None
     m = re.match(r'(\d{1,2}):(\d{2})\s*(AM|PM)', t, re.IGNORECASE)
@@ -41,231 +44,233 @@ def _parse_time(t: str) -> Optional[int]:
         hour += 12
     return hour * 60 + minute
 
+
 def _meetings_conflict(meetings_a: List[Dict], meetings_b: List[Dict]) -> bool:
-    """Check if any two meetings overlap in time on the same day."""
     for ma in meetings_a:
         for mb in meetings_b:
-            if not ma.get('day') or not mb.get('day'):
+            if not ma.get('day') or not mb.get('day') or ma['day'] != mb['day']:
                 continue
-            if ma['day'] != mb['day']:
+            a_s, a_e = _parse_time(ma.get('start_time', '')), _parse_time(ma.get('end_time', ''))
+            b_s, b_e = _parse_time(mb.get('start_time', '')), _parse_time(mb.get('end_time', ''))
+            if None in (a_s, a_e, b_s, b_e):
                 continue
-            a_start = _parse_time(ma.get('start_time', ''))
-            a_end = _parse_time(ma.get('end_time', ''))
-            b_start = _parse_time(mb.get('start_time', ''))
-            b_end = _parse_time(mb.get('end_time', ''))
-            if None in (a_start, a_end, b_start, b_end):
-                continue
-            if a_start < b_end and b_start < a_end:
+            if a_s < b_e and b_s < a_e:
                 return True
     return False
+
 
 def _schedule_has_conflict(sections: List[Dict]) -> bool:
-    """Check if a list of sections has any internal time conflicts."""
     for i in range(len(sections)):
         for j in range(i + 1, len(sections)):
-            if _meetings_conflict(
-                sections[i].get('meetings', []),
-                sections[j].get('meetings', [])
-            ):
+            if _meetings_conflict(sections[i].get('meetings', []), sections[j].get('meetings', [])):
                 return True
     return False
 
+
 def _score_schedule(sections: List[Dict]) -> float:
-    """
-    Score a schedule. Higher = better.
-    Prefers sections with more available seats and fewer waitlisted students.
-    """
     score = 0.0
     for sec in sections:
         avail = sec.get('availability', {})
-        capacity = avail.get('capacity', 0)
-        enrolled = avail.get('enrolled', 0)
-        waitlist = sec.get('waitlist_count', 0)
-        if capacity > 0:
-            fill_ratio = enrolled / capacity
-            score += (1.0 - fill_ratio) * 10  # reward open seats
-        score -= waitlist * 0.5  # penalize waitlisted sections
+        cap = avail.get('capacity', 0)
+        enr = avail.get('enrolled', 0)
+        if cap > 0:
+            score += (1.0 - enr / cap) * 10
+        score -= sec.get('waitlist_count', 0) * 0.5
         if sec.get('cancelled', False):
-            score -= 100  # heavily penalize cancelled sections
+            score -= 100
     return score
 
+
 def _generate_warnings(sections: List[Dict]) -> List[Dict[str, str]]:
-    """Generate enrollment-related warnings for a schedule."""
     warnings = []
     for sec in sections:
         avail = sec.get('availability', {})
-        capacity = avail.get('capacity', 0)
-        enrolled = avail.get('enrolled', 0)
-        waitlist = sec.get('waitlist_count', 0)
-        code = sec.get('section_code', '?')
-        course = sec.get('_course_code', '?')
-
+        cap, enr = avail.get('capacity', 0), avail.get('enrolled', 0)
+        wl = sec.get('waitlist_count', 0)
+        label = f"{sec.get('_course_code', '?')} {sec.get('section_code', '?')}"
         if sec.get('cancelled', False):
-            warnings.append({
-                "type": "cancelled",
-                "section": f"{course} {code}",
-                "message": f"⚠️ {course} {code} is **cancelled**."
-            })
-        elif capacity > 0 and enrolled >= capacity:
-            msg = f"🔴 {course} {code} is **full** ({enrolled}/{capacity})"
-            if waitlist > 0:
-                msg += f" with {waitlist} on **waitlist**"
-            warnings.append({"type": "full", "section": f"{course} {code}", "message": msg})
-        elif capacity > 0 and (enrolled / capacity) >= 0.85:
-            warnings.append({
-                "type": "almost_full",
-                "section": f"{course} {code}",
-                "message": f"🟡 {course} {code} is **almost full** ({enrolled}/{capacity})"
-            })
+            warnings.append({"type": "cancelled", "section": label, "message": f"⚠️ {label} is **cancelled**."})
+        elif cap > 0 and enr >= cap:
+            msg = f"🔴 {label} is **full** ({enr}/{cap})"
+            if wl > 0:
+                msg += f" with {wl} on **waitlist**"
+            warnings.append({"type": "full", "section": label, "message": msg})
+        elif cap > 0 and (enr / cap) >= 0.85:
+            warnings.append({"type": "almost_full", "section": label, "message": f"🟡 {label} is **almost full** ({enr}/{cap})"})
     return warnings
 
 
-def find_course(course_code: str, session: str = None) -> Optional[Dict]:
-    """Find a course by code from the timetable data."""
+def _get_course_term(course: Dict) -> str:
+    """Determine F, S, or Y from course code suffix."""
+    code = course.get('course_code', '')
+    if code.endswith('Y'):
+        return 'Y'
+    elif code.endswith('F'):
+        return 'F'
+    elif code.endswith('S'):
+        return 'S'
+    # Fallback: check session string
+    sess = course.get('session', '')
+    if '20259' in sess and '20261' in sess:
+        return 'Y'
+    elif '20259' in sess:
+        return 'F'
+    return 'S'
+
+
+def find_course(course_code: str) -> Optional[Dict]:
     courses = _load_courses()
-    # Normalize: the JSON uses codes like "CSC110Y1F" (with session suffix)
     code_upper = course_code.upper()
     for c in courses:
         c_code = c.get('course_code', '').upper()
-        if c_code == code_upper:
-            if session and session not in c.get('session', ''):
-                continue
-            return c
-        # Also try partial match (e.g. user types CSC110Y1, data has CSC110Y1F)
-        if c_code.startswith(code_upper):
-            if session and session not in c.get('session', ''):
-                continue
+        if c_code == code_upper or c_code.startswith(code_upper):
             return c
     return None
 
 
+def _build_section_combos(course: Dict) -> List[Tuple[Dict, ...]]:
+    """Build all (LEC, TUT, PRA, ...) combos for one course, skipping cancelled."""
+    sections = course.get('sections', [])
+    by_type: Dict[str, List[Dict]] = {}
+    for sec in sections:
+        if sec.get('cancelled', False):
+            continue
+        sec_type = sec.get('type', 'OTHER')
+        tagged = {**sec, '_course_code': course['course_code'], '_title': course.get('title', ''), '_term': _get_course_term(course)}
+        by_type.setdefault(sec_type, []).append(tagged)
+    if not by_type:
+        return []
+    return list(product(*[by_type[t] for t in sorted(by_type.keys())]))
+
+
 def generate_schedules(
     course_codes: List[str],
-    session: str = None,
     max_schedules: int = 5
 ) -> Dict[str, Any]:
     """
-    Main entry point.
+    Generate session-aware, conflict-free schedules.
 
-    Args:
-        course_codes: List of course codes the user wants (e.g. ["CSC108H1", "MAT137Y1"])
-        session: Optional session filter (e.g. "20259" for Fall 2025)
-        max_schedules: Maximum number of schedules to return
-
-    Returns:
-        {
-            "schedules": [...],
-            "warnings": [...],
-            "errors": [...]
-        }
+    Returns separate fall_schedule and winter_schedule for each valid combo.
+    Full-year (Y) courses are locked to the same section across both semesters.
     """
     errors = []
-    course_section_groups = []  # One entry per course: list of "section combos"
+    fall_courses = []    # F courses
+    winter_courses = []  # S courses
+    year_courses = []    # Y courses (appear in BOTH)
 
     for code in course_codes:
-        course = find_course(code, session)
+        course = find_course(code)
         if not course:
-            errors.append(f"Course '{code}' not found in the timetable data.")
+            errors.append(f"Course '{code}' not found in timetable data.")
+            continue
+        combos = _build_section_combos(course)
+        if not combos:
+            errors.append(f"Course '{code}' has no available sections.")
             continue
 
-        sections = course.get('sections', [])
-        if not sections:
-            errors.append(f"Course '{code}' has no sections available.")
-            continue
+        term = _get_course_term(course)
+        entry = {'course_code': course['course_code'], 'title': course.get('title', ''), 'term': term, 'combos': combos}
 
-        # Group sections by type
-        by_type: Dict[str, List[Dict]] = {}
-        for sec in sections:
-            sec_type = sec.get('type', 'OTHER')
-            if sec.get('cancelled', False):
-                continue  # Skip cancelled sections
-            by_type.setdefault(sec_type, [])
-            # Tag each section with its parent course code for warnings
-            sec_copy = {**sec, '_course_code': course['course_code'], '_title': course.get('title', '')}
-            by_type[sec_type].append(sec_copy)
+        if term == 'F':
+            fall_courses.append(entry)
+        elif term == 'S':
+            winter_courses.append(entry)
+        else:  # Y
+            year_courses.append(entry)
 
-        # Build all possible combos: pick one of each required type
-        # E.g. if course has LEC + TUT, combo = (one LEC choice, one TUT choice)
-        type_options = []
-        for sec_type in sorted(by_type.keys()):
-            type_options.append(by_type[sec_type])
+    # Y courses must not conflict with F courses (fall) NOR S courses (winter)
+    # AND use the same sections in both semesters.
+    #
+    # Strategy: generate cross-product of all course combos, then validate
+    # that fall-side has no conflicts and winter-side has no conflicts.
 
-        if not type_options:
-            errors.append(f"Course '{code}' has no non-cancelled sections.")
-            continue
+    all_groups = year_courses + fall_courses + winter_courses
+    if not all_groups:
+        return {"schedules": [], "total_valid": 0, "errors": errors}
 
-        # Cartesian product of section choices for this course
-        combos = list(product(*type_options))
-        course_section_groups.append({
-            'course_code': course['course_code'],
-            'title': course.get('title', ''),
-            'combos': combos
-        })
-
-    if not course_section_groups:
-        return {"schedules": [], "warnings": [], "errors": errors}
-
-    # Now generate cross-course combinations
-    # For performance, cap the search space
-    all_combos = [g['combos'] for g in course_section_groups]
-    total_combos = 1
-    for c in all_combos:
-        total_combos *= len(c)
-
-    # If combinatorial explosion, trim each course's options
+    # Cap combinatorial explosion
     MAX_COMBOS = 50000
-    if total_combos > MAX_COMBOS:
-        # Limit each course to top 10 combos by score
-        for g in course_section_groups:
-            scored = sorted(g['combos'], key=lambda combo: sum(_score_schedule(list(combo)) for _ in [1]), reverse=True)
+    all_combo_lists = [g['combos'] for g in all_groups]
+    total = 1
+    for c in all_combo_lists:
+        total *= len(c)
+    if total > MAX_COMBOS:
+        for g in all_groups:
+            scored = sorted(g['combos'], key=lambda combo: _score_schedule(list(combo)), reverse=True)
             g['combos'] = scored[:10]
-        all_combos = [g['combos'] for g in course_section_groups]
+        all_combo_lists = [g['combos'] for g in all_groups]
 
     valid_schedules = []
 
-    for cross_combo in product(*all_combos):
-        # cross_combo is a tuple of tuples: ((LEC, TUT) for course1, (LEC, TUT) for course2, ...)
-        flat_sections = []
-        for course_combo in cross_combo:
-            flat_sections.extend(course_combo)
+    for cross_combo in product(*all_combo_lists):
+        # Split sections into fall-side and winter-side
+        fall_sections = []
+        winter_sections = []
 
-        if not _schedule_has_conflict(flat_sections):
-            score = _score_schedule(flat_sections)
-            warnings = _generate_warnings(flat_sections)
-            valid_schedules.append({
-                'sections': flat_sections,
-                'score': score,
-                'warnings': warnings,
-            })
+        for i, group in enumerate(all_groups):
+            sections_chosen = list(cross_combo[i])
+            term = group['term']
+            if term == 'F':
+                fall_sections.extend(sections_chosen)
+            elif term == 'S':
+                winter_sections.extend(sections_chosen)
+            else:  # Y → appears in BOTH semesters with same meetings
+                fall_sections.extend(sections_chosen)
+                winter_sections.extend(sections_chosen)
 
-    # Sort by score (descending) and return top N
+        # Check conflicts independently for each semester
+        if _schedule_has_conflict(fall_sections):
+            continue
+        if _schedule_has_conflict(winter_sections):
+            continue
+
+        score = _score_schedule(fall_sections + winter_sections)
+        fall_warnings = _generate_warnings(fall_sections)
+        winter_warnings = _generate_warnings(winter_sections)
+
+        valid_schedules.append({
+            'fall_sections': fall_sections,
+            'winter_sections': winter_sections,
+            'score': score,
+            'fall_warnings': fall_warnings,
+            'winter_warnings': winter_warnings,
+        })
+
+    # Sort by score
     valid_schedules.sort(key=lambda s: s['score'], reverse=True)
-    top_schedules = valid_schedules[:max_schedules]
+    top = valid_schedules[:max_schedules]
 
-    # Format for API response
+    def _fmt_entries(sections):
+        return [{
+            'course_code': s.get('_course_code', ''),
+            'title': s.get('_title', ''),
+            'term': s.get('_term', ''),
+            'section_code': s.get('section_code', ''),
+            'type': s.get('type', ''),
+            'instructors': s.get('instructors', []),
+            'meetings': s.get('meetings', []),
+            'availability': s.get('availability', {}),
+            'waitlist_count': s.get('waitlist_count', 0),
+            'delivery_mode': s.get('delivery_mode', ''),
+        } for s in sections]
+
     formatted = []
-    for sched in top_schedules:
-        entries = []
-        for sec in sched['sections']:
-            entries.append({
-                'course_code': sec.get('_course_code', ''),
-                'title': sec.get('_title', ''),
-                'section_code': sec.get('section_code', ''),
-                'type': sec.get('type', ''),
-                'instructors': sec.get('instructors', []),
-                'meetings': sec.get('meetings', []),
-                'availability': sec.get('availability', {}),
-                'waitlist_count': sec.get('waitlist_count', 0),
-                'delivery_mode': sec.get('delivery_mode', ''),
-            })
+    for sched in top:
         formatted.append({
-            'entries': entries,
+            'fall': _fmt_entries(sched['fall_sections']),
+            'winter': _fmt_entries(sched['winter_sections']),
             'score': round(sched['score'], 2),
-            'warnings': sched['warnings'],
+            'fall_warnings': sched['fall_warnings'],
+            'winter_warnings': sched['winter_warnings'],
         })
 
     return {
         "schedules": formatted,
         "total_valid": len(valid_schedules),
         "errors": errors,
+        "summary": {
+            "fall_courses": [c['course_code'] for c in fall_courses],
+            "winter_courses": [c['course_code'] for c in winter_courses],
+            "year_courses": [c['course_code'] for c in year_courses],
+        }
     }
