@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Course Selection Data",
+  "type": "object",
+  "properties": {
+    "course_code": { "type": "string" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "prerequisites": { "type": "string" },
+    "corequisites": { "type": "string" },
+    "exclusions": { "type": "string" },
+    "breadth_requirements": { "type": "string" },
+    "campus": { "type": "string" },
+    "session": { "type": "string" },
+    "notes": { "type": "string" },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "section_code": { "type": "string" },
+          "type": { "type": "string", "enum": ["LEC", "TUT", "PRA"] },
+          "instructors": { "type": "array", "items": { "type": "string" } },
+          "availability": {
+            "type": "object",
+            "properties": {
+              "enrolled": { "type": "integer" },
+              "capacity": { "type": "integer" }
+            }
+          },
+          "waitlist_count": { "type": "integer" },
+          "enrolment_controls": { "type": "array", "items": { "type": "string" } },
+          "delivery_mode": { "type": "string" },
+          "cancelled": { "type": "boolean" },
+          "meetings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] },
+                "start_time": { "type": "string" },
+                "end_time": { "type": "string" },
+                "location": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

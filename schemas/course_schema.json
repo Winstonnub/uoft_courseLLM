@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Course Selection Data",
+  "type": "object",
+  "properties": {
+    "course_code": {
+      "type": "string",
+      "description": "8-character course code (e.g., CSC110Y1)"
+    },
+    "title": {
+      "type": "string",
+      "description": "The course title (e.g., Foundations of Computer Science I)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Full course description from the calendar"
+    },
+    "prerequisites": {
+      "type": "string"
+    },
+    "corequisites": {
+      "type": "string"
+    },
+    "exclusions": {
+      "type": "string"
+    },
+    "breadth_requirements": {
+      "type": "string"
+    },
+    "campus": {
+      "type": "string",
+      "description": "e.g., St. George"
+    },
+    "session": {
+      "type": "string",
+      "description": "e.g., Fall 2025 (F)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Course-level notes (e.g., Delivery Instructions)"
+    },
+    "sections": {
+      "type": "array",
+      "description": "List of all lecture, tutorial, and practical sections offered",
+      "items": {
+        "type": "object",
+        "properties": {
+          "section_code": {
+            "type": "string",
+            "description": "e.g., LEC0101, TUT0101"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["LEC", "TUT", "PRA"],
+            "description": "Derived from section_code"
+          },
+          "instructors": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of instructor names (e.g., ['Mario Badr'])"
+          },
+          "availability": {
+            "type": "object",
+            "properties": {
+              "enrolled": { "type": "integer" },
+              "capacity": { "type": "integer" }
+            }
+          },
+          "waitlist_count": {
+            "type": "integer",
+            "description": "Number of students on waitlist. 0 if 'No'."
+          },
+          "enrolment_controls": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "e.g., ['R1']"
+          },
+          "delivery_mode": {
+            "type": "string",
+            "description": "e.g., In Person"
+          },
+          "cancelled": {
+            "type": "boolean",
+            "description": "True if the section has a CANCELLED note"
+          },
+          "meetings": {
+            "type": "array",
+            "description": "Specific times and locations the section meets",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string",
+                  "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+                },
+                "start_time": {
+                  "type": "string",
+                  "description": "e.g., 11:00 AM"
+                },
+                "end_time": {
+                  "type": "string",
+                  "description": "e.g., 1:00 PM"
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Building code or 'TBA' (e.g., MY, WB, BA)"
+                }
+              },
+              "required": ["day", "start_time", "end_time", "location"]
+            }
+          }
+        },
+        "required": ["section_code", "type", "instructors", "availability", "meetings"]
+      }
+    }
+  },
+  "required": ["course_code", "title", "sections"]
+}
