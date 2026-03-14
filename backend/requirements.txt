@@ -2,8 +2,10 @@ fastapi[standard]
 uvicorn
 requests
 beautifulsoup4
+lxml
 praw
 PyMuPDF
 chromadb
 langchain-openai
 python-dotenv
+playwright

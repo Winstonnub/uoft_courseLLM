@@ -1,6 +1,21 @@
 # UofT AI Copilot Hackathon - Progress Log
 
-**Branch**: `winston`
+**Branch**: `scraper`
+
+---
+
+## Copilot Change Log
+
+| Date | Branch | Change Summary |
+|------|--------|----------------|
+| 2026-03-14 | `scraper` | Created and pushed new `scraper` branch from `winston`. |
+| 2026-03-14 | `scraper` | Merged `main` into `scraper` (added `work_distribution.md`). |
+| 2026-03-14 | `scraper` | Created `scrape_ttb_full.py` — full Playwright scraper for TTB with pagination, accordion expansion, and BeautifulSoup parsing matching `course_schema.json`. Added `playwright` and `lxml` to `requirements.txt`. |
+| 2026-03-14 | `scraper` | Rewrote `scrape_ttb_full.py` — discovered internal TTB API (`api.easi.utoronto.ca/ttb/getPageableCourses`). Now uses `requests` directly (no Playwright needed for data). Handles pagination, normalises all fields to `course_schema.json`. Verified working with CSC311 (2 courses, full section/meeting/enrolment data). |
+
+---
+
+**Previous Branch**: `winston`
 
 ## Completed in Phase 1 (Data Ingestion & Scaffolding)
 We have successfully set up the foundation of the monorepo and created the scrapers needed to ingest our initial hackathon data.
