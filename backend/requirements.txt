@@ -9,3 +9,4 @@ chromadb
 langchain-openai
 python-dotenv
 playwright
+langchain-text-splitters

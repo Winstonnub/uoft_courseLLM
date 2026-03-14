@@ -38,3 +38,26 @@ We have successfully set up the foundation of the monorepo and created the scrap
 1. Someone must generate API keys on the Reddit Developer Portal and put them in `backend/.env`.
 2. Someone must run `python3 scrape_reddit.py`, `python3 scrape_ttb_playwright.py`, and `python3 scrape_syllabi.py` locally to populate the initial raw JSON files.
 3. Once those JSON files are generated, we can move on to **Phase 2**: Normalizing that raw data into SQLite and indexing it into ChromaDB.
+
+---
+
+## Completed in Phase 2 (Database Schema & Ingestion)
+
+### 1. Database Initialization (Winston)
+- **What I did**: Set up the local SQLite database schema and ChromaDB collections.
+- **How I did it**: Wrote `backend/database.py` with `sqlite3` and `chromadb.PersistentClient` to create tables (`courses`) and vector collections (`course_catalog`, `syllabi`, `reddit_discussions`, `academic_rules`).
+- **What it's for**: This establishes the local persistence layer required for the app's Retrieval-Augmented Generation (RAG) and core routing API logic.
+
+### 2. Course Catalog Ingestion (Winston)
+- **What I did**: Ingested and hydrated the structured SQLite database using the scraped Course Calendar data.
+- **How I did it**: Wrote `ingestion/init_db.py` to read `courses.json` and cleanly `INSERT OR UPDATE` all 5,349 scraped courses into the SQLite database table. Ran the script successfully.
+- **What it's for**: Provides the AI course advisor and the timetable planner backend with deterministic access to prerequisite rules, breadth requirements, and basic course metadata.
+
+### 3. Vector Embeddings for Academic Rules (Winston)
+- **What I did**: Built a chunking and embedding pipeline for unstructured Markdown academic documents.
+- **How I did it**: Created `ingestion/chunk_documents.py` using `Langchain`'s `MarkdownTextSplitter` and `OpenAIEmbeddings` to parse files in `/general_academic_info` and push them into the ChromaDB `academic_rules` collection.
+- **What it's for**: Gives the LLM deep semantic contextual knowledge to accurately answer abstract student queries regarding enrollment controls and specific UofT course policies!
+
+### Context for Teammates (Next Actions)
+1. **Sujoy**: Please acquire the remaining dynamic TTB data, syllabus PDFs, and Reddit data so we can chunk and index them into our new SQLite and Chroma schemas as well. Then move those into `ingestion/raw_data`.
+2. **Kiko**: Please start bringing up the frontend Next.js interface components (Chat UI, Timetable block UI) anticipating the FastAPI endpoints Winston will build in Phase 3.
