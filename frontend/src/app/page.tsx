@@ -74,7 +74,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-2xl font-black mb-4">Auto-Generator</h3>
             <p className="text-white/40 font-medium leading-relaxed">
-              Just pick your wishlist. We'll find the perfect, conflict-free schedule ranked by seat availability across all terms.
+              Just pick your wishlist. We&apos;ll find the perfect, conflict-free schedule ranked by seat availability across all terms.
             </p>
           </Link>
 
