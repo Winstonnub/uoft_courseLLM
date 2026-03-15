@@ -189,11 +189,25 @@ export default function GeneratePage() {
     try {
       // Clear existing first
       await fetch("/api/timetable", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clear" }) });
-      // Add all sections from both fall and winter
+      // Group all sections by course_code so we send ONE request per course
+      // with all section types (lec, tut, pra) specified together.
+      // This prevents the API from filling in unwanted defaults.
       const allEntries = [...new Map([...schedule.fall, ...schedule.winter].map(item => [item.course_code + item.section_code, item])).values()];
+      const byCourse: Record<string, { course_code: string; term: string; lec?: string; tut?: string; pra?: string }> = {};
       for (const e of allEntries) {
-        const p: any = {}; if (e.type === "LEC") p.lec = e.section_code; else if (e.type === "TUT") p.tut = e.section_code; else if (e.type === "PRA") p.pra = e.section_code; else p.lec = e.section_code;
-        await fetch("/api/timetable", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add", course_code: e.course_code, session: e.term === "F" ? "20259" : "20261", sections: p }) });
+        if (!byCourse[e.course_code]) {
+          byCourse[e.course_code] = { course_code: e.course_code, term: e.term };
+        }
+        if (e.type === "LEC") byCourse[e.course_code].lec = e.section_code;
+        else if (e.type === "TUT") byCourse[e.course_code].tut = e.section_code;
+        else if (e.type === "PRA") byCourse[e.course_code].pra = e.section_code;
+      }
+      for (const entry of Object.values(byCourse)) {
+        const sections: any = {};
+        if (entry.lec) sections.lec = entry.lec;
+        if (entry.tut) sections.tut = entry.tut;
+        if (entry.pra) sections.pra = entry.pra;
+        await fetch("/api/timetable", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add", course_code: entry.course_code, session: entry.term === "F" ? "20259" : "20261", sections }) });
       }
       router.push("/timetable");
     } catch {} finally { setApplying(false); }
@@ -232,7 +246,7 @@ export default function GeneratePage() {
           <div className="relative mb-8">
             <input type="text" value={courseInput} onChange={(e) => { setCourseInput(e.target.value); fetchSuggestions(e.target.value); }} onKeyDown={(e) => { if (e.key === "Escape") setShowDrop(false); }} placeholder="Search courses (MAT223, CSC148)..." className="w-full rounded-2xl bg-white/5 px-6 py-5 text-sm font-bold border border-white/10 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none" autoComplete="off" />
             {showDrop && suggestions.length > 0 && (
-              <div className="absolute top-full mt-2 w-full glass rounded-3xl border border-white/20 shadow-2xl z-50 overflow-hidden py-2">{suggestions.map(s => (<button key={s.course_code} className="w-full text-left px-6 py-4 flex items-center gap-4 hover:bg-white/5 transition-all group" onMouseDown={e => { e.preventDefault(); if (!wishlist.find(x=>x.code===s.course_code)) setWishlist(p => [...p, {code:s.course_code, title:s.title}]); setCourseInput(""); setShowDrop(false); }}> <span className="font-mono text-xs font-black bg-emerald-500/20 text-emerald-400 rounded px-2 py-1 transition-all group-hover:bg-emerald-500/30">{s.course_code}</span> <span className="text-sm font-bold text-white/80">{s.title}</span></button>))}</div>
+              <div className="absolute top-full mt-2 w-full bg-[#0f1729] rounded-3xl border border-white/20 shadow-2xl z-50 overflow-hidden py-2 max-h-[300px] overflow-y-auto">{suggestions.map(s => (<button key={s.course_code} className="w-full text-left px-6 py-4 flex items-center gap-4 hover:bg-white/10 transition-all group" onMouseDown={e => { e.preventDefault(); if (!wishlist.find(x=>x.code===s.course_code)) setWishlist(p => [...p, {code:s.course_code, title:s.title}]); setCourseInput(""); setShowDrop(false); }}> <span className="font-mono text-xs font-black bg-emerald-500/20 text-emerald-400 rounded px-2 py-1 transition-all group-hover:bg-emerald-500/30">{s.course_code}</span> <span className="text-sm font-bold text-white/80">{s.title}</span></button>))}</div>
             )}
           </div>
           <div className="flex flex-wrap gap-3 mb-8">

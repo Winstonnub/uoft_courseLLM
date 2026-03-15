@@ -153,19 +153,60 @@ def find_course(course_code: str) -> Optional[Dict]:
     return None
 
 
+def _dedup_meetings(meetings: List[Dict]) -> List[Dict]:
+    """Remove duplicate meetings (Y courses list each meeting twice, one per semester).
+    Dedup by day+time only — different rooms for the same slot are still the same class."""
+    seen = set()
+    result = []
+    for m in meetings:
+        key = (m.get('day', ''), m.get('start_time', ''), m.get('end_time', ''))
+        if key not in seen:
+            seen.add(key)
+            result.append(m)
+    return result
+
+
 def _build_section_combos(course: Dict) -> List[Tuple[Dict, ...]]:
-    """Build all (LEC, TUT, PRA, ...) combos for one course, skipping cancelled."""
+    """Build all (LEC, TUT, PRA, ...) combos for one course, skipping cancelled
+    sections and combos with internal time conflicts."""
     sections = course.get('sections', [])
     by_type: Dict[str, List[Dict]] = {}
     for sec in sections:
         if sec.get('cancelled', False):
             continue
         sec_type = sec.get('type', 'OTHER')
-        tagged = {**sec, '_course_code': course['course_code'], '_title': course.get('title', ''), '_term': _get_course_term(course)}
+        # Deduplicate meetings (Y courses have them listed twice)
+        deduped = _dedup_meetings(sec.get('meetings', []))
+        tagged = {
+            **sec,
+            'meetings': deduped,
+            '_course_code': course['course_code'],
+            '_title': course.get('title', ''),
+            '_term': _get_course_term(course),
+        }
         by_type.setdefault(sec_type, []).append(tagged)
     if not by_type:
         return []
-    return list(product(*[by_type[t] for t in sorted(by_type.keys())]))
+
+    all_combos = list(product(*[by_type[t] for t in sorted(by_type.keys())]))
+
+    # Filter out combos where sections WITHIN this course conflict
+    # (e.g., LEC and TUT at the same time)
+    valid_combos = []
+    for combo in all_combos:
+        has_internal_conflict = False
+        secs = list(combo)
+        for i in range(len(secs)):
+            for j in range(i + 1, len(secs)):
+                if _meetings_conflict(secs[i].get('meetings', []), secs[j].get('meetings', [])):
+                    has_internal_conflict = True
+                    break
+            if has_internal_conflict:
+                break
+        if not has_internal_conflict:
+            valid_combos.append(combo)
+
+    return valid_combos
 
 
 def generate_schedules(

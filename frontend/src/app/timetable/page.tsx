@@ -372,6 +372,11 @@ export default function TimetablePage() {
     } finally { setTtLoading(false); }
   }, []);
 
+  const isSectionAdded = useCallback((course: Course, sec_code: string) => {
+    const entryId = `${course.course_code}::${sec_code}`;
+    return timetable.entries.some(e => e.id === entryId);
+  }, [timetable.entries]);
+
   return (
     <div className="min-h-screen relative bg-[#030712] text-white">
       {/* Background blobs */}
@@ -435,7 +440,7 @@ export default function TimetablePage() {
                   </div>
                 </div>
               ))}
-              {totalPages > 1 && (<div className="flex items-center justify-center gap-4 pt-6"><button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-xl bg-white/5 border border-white/10 disabled:opacity-20 hover:bg-white/10 transition">←</button><span className="text-[10px] font-black uppercase tracking-widest text-white/30">Page {page} / {totalPages}</span><button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-2 rounded-xl bg-white/5 border border-white/10 disabled:opacity-20 hover:bg-white/10 transition">→</button></div>)}
+              {(data?.totalPages ?? 0) > 1 && (<div className="flex items-center justify-center gap-4 pt-6"><button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-xl bg-white/5 border border-white/10 disabled:opacity-20 hover:bg-white/10 transition">←</button><span className="text-[10px] font-black uppercase tracking-widest text-white/30">Page {page} / {data?.totalPages}</span><button onClick={() => setPage(p => Math.min(data?.totalPages ?? 1, p + 1))} disabled={page === (data?.totalPages ?? 1)} className="p-2 rounded-xl bg-white/5 border border-white/10 disabled:opacity-20 hover:bg-white/10 transition">→</button></div>)}
             </div>
           </div>
         </div>

@@ -7,3 +7,6 @@ backend/copilot.db
 frontend/.env.local
 node_modules/
 .DS_Store
+**/__pycache__/
+*.log
+backend/chroma_db_backup/
