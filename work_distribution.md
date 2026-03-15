@@ -47,3 +47,10 @@ This document defines the roles and responsibilities for the hackathon team (Win
 
 ## Example Prompt for Your AI Agent
 > "Hi AI, I am [Your Name]. I am working on a 30-hour hackathon to build a UofT AI Copilot. Read `work_distribution.md` to understand my specific role, and read `phase.md` to understand the overall project goals. Help me accomplish my next task."
+
+---
+
+## Phase 6 Updates
+- **Winston**: Completed the full glassmorphism redesign, rewrote the scheduler with backtracking, added time preference scoring, built the dashboard, and fixed the chat API. All frontend pages are now consistently styled.
+- **Kiko**: Original timetable visualizer work has been restyled and moved to `/timetable`. The "Apply to Timetable" feature bridges the generator and timetable views.
+- **Sujoy**: Scraper work (`timetable_full.json`) is being actively consumed by the new backtracking scheduler. No new scraping tasks needed for Phase 6.

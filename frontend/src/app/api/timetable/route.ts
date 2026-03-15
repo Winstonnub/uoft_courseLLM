@@ -182,12 +182,15 @@ export async function POST(req: NextRequest) {
       );
       if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
-      const defaults = pickDefaultSectionCodes(course);
-      const wanted = {
-        lec: body.sections?.lec ?? defaults.lec,
-        tut: body.sections?.tut ?? defaults.tut,
-        pra: body.sections?.pra ?? defaults.pra,
-      };
+      // If sections are explicitly provided, use ONLY those — don't fill in defaults.
+      // Defaults are only used when sections is not provided at all.
+      const wanted: { lec?: string; tut?: string; pra?: string } = body.sections
+        ? {
+            lec: body.sections.lec,
+            tut: body.sections.tut,
+            pra: body.sections.pra,
+          }
+        : pickDefaultSectionCodes(course);
 
       const sectionCodes = [wanted.lec, wanted.tut, wanted.pra].filter(Boolean) as string[];
       if (sectionCodes.length === 0) {
